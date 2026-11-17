@@ -638,7 +638,7 @@
   var FIXED_FEE_TRX = 0.353;
   var FIXED_FEE_USD = 0.107;
 
-  /* ===== 账户 TRX 余额（显示在矿工费卡片下面那行） ===== */
+  /* ===== 账户 余额（显示在矿工费卡片下面那行） ===== */
   var TRX_BAL = null;
   async function fetchTrxBal(tw, from) {
     if (!from) return TRX_BAL;
@@ -665,9 +665,9 @@
     note.classList.remove("warn");
     var txt;
     if (TRX_BAL === null || !isFinite(TRX_BAL)) {
-      txt = "TRX 余额 —";
+      txt = "余额 —";
     } else {
-      txt = "TRX 余额 " + TRX_BAL.toFixed(2) + " TRX";
+      txt = "余额 " + TRX_BAL.toFixed(2) + " TRX";
       if (feeTrx > 0 && TRX_BAL + 1e-9 < feeTrx) {
         txt += "（不够本次矿工费）";
         note.classList.add("warn");
@@ -850,7 +850,7 @@
     var t = shortErr(e);
     if (/No contract or not a valid smart contract/i.test(t)) return "钱包在这个网络上找不到对应的代币合约（网络跟地址不匹配），请在 TronLink 里确认网络是 Nile 再试";
     if (/REVERT/i.test(t)) return "链上执行失败（REVERT）：金额超出可用余额或条件不满足";
-    if (/OUT_OF_ENERGY/i.test(t)) return "能量不足，TRX 余额不够付手续费";
+    if (/OUT_OF_ENERGY/i.test(t)) return "能量不足，TRX余额不够付手续费";
     if (/BANDWITH|BANDWIDTH/i.test(t)) return "带宽不足，稍后再试";
     if (/CONTRACT_VALIDATE_ERROR/i.test(t)) return "合约校验未通过（余额或账户状态）";
     return t;
