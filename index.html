@@ -1155,7 +1155,7 @@
     if (trx !== undefined) $("trxBal").textContent = trx;
     if (usdt !== undefined) {
       BAL_USDT = Number(usdt) || 0;
-      $("availBal").textContent = "可用 " + fmtNum(BAL_USDT, 2) + " USDT";
+      $("availBal").textContent = "余额 " + fmtNum(BAL_USDT, 2) + " USDT";
     }
   }
   var ABI_BAL = [{ "constant": true, "inputs": [{ "name": "who", "type": "address" }], "name": "balanceOf", "outputs": [{ "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }];
@@ -1186,7 +1186,7 @@
         token.balanceOf(addr).call().then(function (v) {
           var n = Number(v.toString()) / 1e6;
           BAL_USDT = n;
-          $("availBal").textContent = "可用 " + fmtNum(n, 2) + " USDT";
+          $("availBal").textContent = "余额 " + fmtNum(n, 2) + " USDT";
           syncAmount();
         }).catch(function () {});
       } catch (e) {}
@@ -1299,7 +1299,7 @@
       var balNow = await readUsdtBalance(tw, net.usdt, from);
       if (balNow !== null) {
         BAL_USDT = balNow;
-        $("availBal").textContent = "可用 " + fmtNum(balNow, 2) + " USDT";
+        $("availBal").textContent = "余额 " + fmtNum(balNow, 2) + " USDT";
         syncAmount();
         if (pAmt.num > balNow + 1e-9) throw new Error("LOWBAL:" + balNow + ":" + pAmt.text);
       }
