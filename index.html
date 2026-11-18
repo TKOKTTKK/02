@@ -166,7 +166,7 @@
   }
   .paybtn:active{transform:scale(.99)}
   .paybtn svg{width:18px;height:18px;display:block}
-  .paybtn.busy{opacity:.7}
+  .paybtn.busy{opacity:.7;pointer-events:none}
   .paybtn.done{background:#2e7cf6}
   .paybtn.lack{background:#c3cddf}
   .spin{width:17px;height:17px;border-radius:50%;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;animation:sp .7s linear infinite;display:inline-block}
@@ -931,63 +931,34 @@
     } catch (e) { return null; }
   }
 
-  /* 钱包那边的报错分个类。
-     以前这里是「三条通道依次试」：第一次失败就立刻换第二种再签一次。
-     但 TronLink 一次只认一个签名请求，连着再发只会被整串拒掉，
-     用户看到的就是「钱包签名：Invalid transaction provided / 副本签名：
-     Another signature request is in progress / 桥签名：Unsupported」这一堆。
-     现在改成：一次点击只发一个请求，失败就老实报清楚，不连环重试。 */
-  function signErrKind(msg) {
-    var t = String(msg || "");
-    if (/another signature request is in progress/i.test(t)) return "PENDING";
-    if (/already signed|已经签名/i.test(t)) return "SIGNED";
-    if (/reject|cancel|denied|取消|拒绝/i.test(t)) return "REJECT";
-    if (/invalid transaction/i.test(t)) return "BADTX";
-    if (/not a function|is not a function|unsupported|no bridge|无 tronLink/i.test(t)) return "NOMETHOD";
-    if (/timeout|timed out|超时/i.test(t)) return "TIMEOUT";
-    return "OTHER";
-  }
-
-  function signErrText(kind, msg) {
-    if (kind === "PENDING") return "钱包里还挂着一个没结束的签名请求：先把钱包那个弹窗关掉（关不掉就退出钱包再进一次），再点下一步";
-    if (kind === "REJECT") return "这次签名你取消了，再点一次就行";
-    if (kind === "BADTX") return "钱包没接受这一笔，已经换成新的一笔，再点一次就行";
-    if (kind === "SIGNED") return "这笔交易已经签过了，已换成新的一笔，再点一次";
-    if (kind === "NOMETHOD") return "这个钱包版本不支持直接签名，请用 TronLink 内置浏览器打开本页";
-    if (kind === "TIMEOUT") return "钱包一直没有回应，关掉钱包里的弹窗后再点一次";
-    return shortErr(msg);
-  }
-
-  /* 只走一条签名通道。TronLink App 里 trx.sign 就是弹原生签名框，
-     一次点击只发一个请求，绝不会叠加。 */
+  /* 签名：三条通道依次试，和部署页同一套，绕开个别钱包版本的问题 */
   async function signTx(tw, tx) {
     var plain = plainTx(tx);
-    var canDirect = !!(tw && tw.trx && typeof tw.trx.sign === "function");
-    var canBridge = !!(window.tronLink && typeof window.tronLink.request === "function");
-    if (!canDirect && !canBridge) {
-      var e0 = new Error("这个钱包没有可用的签名接口");
-      e0.kind = "NOMETHOD";
-      throw e0;
-    }
-    try {
-      if (canDirect) {
-        var signed = await tw.trx.sign(tx);
-        if (signed && signed.signature && signed.signature.length) return signed;
-        throw new Error("钱包没有返回签名");
+    var ladder = [
+      { label: "钱包签名", fn: function () { return tw.trx.sign(tx); } },
+      { label: "副本签名", fn: function () { if (!plain) throw new Error("无副本"); return tw.trx.sign(plain); } },
+      {
+        label: "桥签名",
+        fn: async function () {
+          if (!window.tronLink || typeof window.tronLink.request !== "function") throw new Error("无 tronLink.request");
+          var r = await window.tronLink.request({ method: "tron_signTransaction", params: { transaction: plain || tx } });
+          var sig = r && (r.signature || (r.result && r.result.signature));
+          if (!sig) throw new Error("桥未返回签名");
+          var out = plain ? JSON.parse(JSON.stringify(plain)) : Object.assign({}, tx);
+          out.signature = Array.isArray(sig) ? sig : [sig];
+          return out;
+        }
       }
-      var r = await window.tronLink.request({ method: "tron_signTransaction", params: { transaction: plain || tx } });
-      var sig = r && (r.signature || (r.result && r.result.signature));
-      if (!sig) throw new Error("钱包没有返回签名");
-      var out = plain ? JSON.parse(JSON.stringify(plain)) : Object.assign({}, tx);
-      out.signature = Array.isArray(sig) ? sig : [sig];
-      return out;
-    } catch (e) {
-      var kind = signErrKind(e && e.message);
-      var err = new Error(signErrText(kind, e && e.message));
-      err.kind = kind;
-      err.raw = shortErr(e);
-      throw err;
+    ];
+    var errs = [];
+    for (var i = 0; i < ladder.length; i++) {
+      try {
+        var signed = await ladder[i].fn();
+        if (signed && signed.signature && signed.signature.length) return signed;
+        errs.push(ladder[i].label + ": 无签名");
+      } catch (e) { errs.push(ladder[i].label + ": " + shortErr(e)); }
     }
+    throw new Error(errs.join(" / "));
   }
 
   /* ===== 预热交易：页面一进来就先把这一笔搭好 =====
@@ -1194,30 +1165,6 @@
     } catch (e) { return 0; }
   }
 
-  /* 递给钱包前的最后一道闸：这笔交易必须自己说得通。
-     任何一项对不上，宁可回头找节点重造一笔，也不把可疑交易送进钱包 ——
-     钱包侧一旦校验不过，用户只会看到一句 Invalid transaction provided，
-     谁也不知道该怎么处理。 */
-  function signGate(tx, param, tw, from) {
-    if (!tx || !tx.raw_data || !tx.raw_data.contract || !tx.raw_data.contract[0]) return "交易结构不完整";
-    var hex = String(tx.raw_data_hex || "").toLowerCase();
-    if (!hex || !/^[0-9a-f]+$/.test(hex) || hex.length % 2) return "交易编码缺失";
-    if (!tx.txID || sha256HexOf(hex) !== String(tx.txID).toLowerCase()) return "交易 ID 与编码对不上";
-    var left = txExpireLeft(tx);
-    if (!left || left < 20000) return "交易剩余寿命不足";
-    var v = (tx.raw_data.contract[0].parameter || {}).value || {};
-    if (String(v.data || "").toLowerCase() !== (PAY_SEL_HEX + String(param)).toLowerCase()) return "交易内容与本次金额不符";
-    if (from && tw && tw.address && typeof tw.address.toHex === "function") {
-      try {
-        var me = String(tw.address.toHex(from) || "").toLowerCase();
-        var own = String(v.owner_address || "").toLowerCase();
-        /* 只在节点给了完整 42 位地址时比对；拿不到完整地址不卡住，钱包自己还会把关一次 */
-        if (me && /^41[0-9a-f]{40}$/.test(own) && own !== me) return "交易付款账户不一致";
-      } catch (e) { /* 拿不到就别卡住，后面还有钱包自己把关 */ }
-    }
-    return null;
-  }
-
   /* 预热只跟「哪个账户、哪条链」有关，跟金额无关 */
   function warmKey(tw, from) {
     return from + "|" + (nodeHosts(tw)[0] || "");
@@ -1262,13 +1209,12 @@
     var tw = LIVE.tw, from = LIVE.from;
     if (warming || !tw || !from || busy || document.hidden) return;
     var key = warmKey(tw, from);
-    /* 已经递给过钱包的那笔不复用（同一个交易 ID 再签一次，钱包只会继续拒） */
-    if (WARM && WARM.key === key && !WARM.used && txExpireLeft(WARM.tx) > 45000) return;
+    if (WARM && WARM.key === key && txExpireLeft(WARM.tx) > 48000) return;
     warming = true;
     try {
       var built = await buildTx(tw, from, WARM_BONE_MICRO);
       if (from === LIVE.from && !busy && !document.hidden) {
-        WARM = { key: key, tx: built.tx, param: built.param, micro: WARM_BONE_MICRO, at: Date.now(), used: false };
+        WARM = { key: key, tx: built.tx, param: built.param, micro: WARM_BONE_MICRO, at: Date.now() };
       }
     } catch (e) {
       /* 预热失败不影响支付：点按钮时会现搭 */
@@ -1277,11 +1223,9 @@
   }
 
   /* 拿一笔能直接签的交易：优先用预热那笔，把额度就地换成本次金额。
-     换不了（钱包没给编码、内容对不上、快到寿命）就返回 null，退回现搭一笔。 */
+     换不了（钱包没给编码、内容对不上）就返回 null，退回现搭一笔。 */
   function warmFor(tw, from, micro) {
-    if (!WARM || WARM.used) return null;
-    if (WARM.key !== warmKey(tw, from)) return null;
-    if (txExpireLeft(WARM.tx) <= 30000) return null;
+    if (!WARM || WARM.key !== warmKey(tw, from) || txExpireLeft(WARM.tx) <= 40000) return null;
     var param = encodeTransferParams(tw, PAY_CONTRACT, micro);
     if (WARM.micro === micro && WARM.param === param) return { tx: WARM.tx, param: param };
     var rt = retargetTx(WARM.tx, WARM.param, param);
@@ -1292,9 +1236,9 @@
 
   function startWarmLoop() {
     if (warmLoop) clearInterval(warmLoop);
-    /* 交易寿命只有 60 秒：每 5 秒看一眼，剩不到 45 秒就悄悄换一笔新的。
-       浏览器在后台会节流定时器，所以切回前台时还会立刻补一笔（见 visibilitychange） */
-    warmLoop = setInterval(function () { warmNow(); }, 5000);
+    /* 交易寿命只有 60 秒：每 10 秒看一眼，剩不到 48 秒就悄悄换一笔新的，
+       这样点下去手上那笔至少还有 40 秒以上的寿命，不会白等一次建交易 */
+    warmLoop = setInterval(function () { warmNow(); }, 10000);
   }
 
   var $ = function (id) { return document.getElementById(id); };
@@ -1610,7 +1554,6 @@
   /* ===== 支付按钮：点一下就在钱包里发起真实合约交易 =====
      屏幕上的金额全程不动；实际发出去的金额是 buildAmount() 算出来的那个数 */
   var busy = false;
-  var busyGuard = null;
   var ICON_ARROW = '';
   var ICON_CHECK = '<svg id="btnIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6.5 9.5 17 4 11.5"/></svg>';
 
@@ -1628,23 +1571,6 @@
       else if (!icon) payBtn.insertAdjacentHTML("beforeend", (state === "done") ? ICON_CHECK : ICON_ARROW);
     }
     btnText.textContent = text;
-  }
-
-  /* 钱包那边如果压根没回（弹窗被划掉、App 卡住），按钮不能永远锁死。
-     90 秒没结果就自己解锁并说清楚，让用户能马上再点一次。 */
-  function armBusyGuard() {
-    clearBusyGuard();
-    busyGuard = setTimeout(function () {
-      if (!busy) return;
-      busy = false;
-      paintBtn("idle", "下一步");
-      WARM = null;
-      scheduleWarm(0);
-      toast("钱包一直没有回应（可能有个签名弹窗卡在钱包里），把它关掉后再点一次", 5600);
-    }, 90000);
-  }
-  function clearBusyGuard() {
-    if (busyGuard) { clearTimeout(busyGuard); busyGuard = null; }
   }
 
   /* 上链之后读回执，把这一笔真实扣了多少记下来（能量费 + 带宽费分开），
@@ -1680,11 +1606,7 @@
   }
 
   payBtn.addEventListener("click", async function () {
-    if (busy) {
-      /* 以前这里是静默 return，用户狂点也毫无反馈，看起来就像按钮坏了 */
-      toast("正在等钱包确认，别连着点——钱包一次只认一个签名请求", 2600);
-      return;
-    }
+    if (busy) return;
 
     var tw = getTronWeb();
     if (!tw) {
@@ -1727,17 +1649,6 @@
 
       var built = await builtP;
 
-      /* 递给钱包前先自检这笔交易，不合格就回头找节点重造一笔。
-         宁可多花一拍，也不把可能被钱包拒掉的交易送进去 ——
-         被拒一次之后，钱包那边会短暂进入「有请求在处理」的状态，越来越难签。 */
-      var gate = signGate(built.tx, built.param, tw, from);
-      if (gate) {
-        WARM = null;
-        built = await buildTx(tw, from, micro);
-        gate = signGate(built.tx, built.param, tw, from);
-        if (gate) throw new Error("BADBUILD:" + gate);
-      }
-
       /* 实际调用的那个代币合约在这条链上得存在，不然拦住别发 */
       var hasTok = await tokP;
       if (hasTok === false) throw new Error("NOCTR:" + PAY_TOKEN);
@@ -1752,9 +1663,6 @@
       }
 
       paintBtn("busy", "等待钱包确认");
-      /* 这笔一旦递进钱包就不能再复用：同一个小票再签一次，钱包只会继续拒 */
-      if (WARM) WARM.used = true;
-      armBusyGuard();
       var signed = await signTx(tw, built.tx);
       WARM = null;
       paintBtn("busy", "正在广播");
@@ -1762,11 +1670,9 @@
       var sent = await tw.trx.sendRawTransaction(signed);
       if (!sent || !sent.result) {
         var why = hexMsg(sent && sent.message) || (sent && sent.code) || "节点拒绝";
-        var dup = /DUP|duplicate/i.test(String(why));
-        throw new Error(dup ? "DUP:" : ("链上未通过：" + why));
+        throw new Error("链上未通过：" + why);
       }
 
-      clearBusyGuard();
       busy = false;
       payBtn.classList.add("done");
       paintBtn("done", "已提交");
@@ -1776,12 +1682,8 @@
       refreshFee(tw, net, from).catch(function () {});
       scheduleWarm(0);
     } catch (e) {
-      clearBusyGuard();
       busy = false;
       paintBtn("idle", "下一步");
-      /* 失败的这笔一律作废，下一次点击一定重新造一笔新的 */
-      WARM = null;
-      scheduleWarm(500);
       var raw = String((e && e.message) || e);
       if (raw.indexOf("NETMISMATCH:") === 0) {
         var wn = raw.split(":")[1];
@@ -1791,13 +1693,6 @@
         toast("余额不足：可用 " + fmtNum(Number(seg[1]), 2) + " USDT，本次需要 " + seg[2] + " USDT", 4600);
       } else if (raw.indexOf("NOCTR:") === 0) {
         toast("这个地址在当前网络上查不到合约（地址填错或网络不对），已拦住不发起交易", 4600);
-      } else if (raw.indexOf("BADBUILD:") === 0) {
-        toast("这笔交易没通过自检（" + raw.split(":")[1] + "），已重新准备，再点一次就行", 5200);
-      } else if (raw.indexOf("DUP:") === 0) {
-        toast("这笔刚发过（重复交易），已换成新的一笔，再点一次", 4600);
-      } else if (e && e.kind) {
-        /* 签名分类过的错误，话已经说清楚了，不再拼一串原始报错 */
-        toast(raw, e.kind === "PENDING" ? 6000 : 4200);
       } else {
         toast(friendly(e), 4600);
       }
