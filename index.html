@@ -162,13 +162,17 @@
     background:#2e7cf6;color:#fff;font-size:17.5px;font-weight:600;
     font-family:inherit;letter-spacing:.5px;
     display:flex;align-items:center;justify-content:center;gap:8px;
-    transition:transform .12s ease,background .25s ease,opacity .2s;
+    transition:transform .12s ease,background .15s ease,opacity .2s;
   }
   .paybtn:active{transform:scale(.99)}
   .paybtn svg{width:18px;height:18px;display:block}
-  .paybtn.busy{opacity:.92}
   .paybtn.done{background:#2e7cf6}
   .paybtn.lack{background:#c3cddf}
+  /* 点下去：底色变淡（#c1dbf6），文字收起，只留中间一个白色转圈 */
+  .paybtn.busy,.paybtn.busy.lack{background:#c1dbf6;opacity:1}
+  .paybtn.busy #btnText{display:none}
+  .paybtn.busy:active{transform:none}
+  .paybtn.busy .spin{border-color:rgba(255,255,255,.55);border-top-color:#fff}
   .spin{width:17px;height:17px;border-radius:50%;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;animation:sp .7s linear infinite;display:inline-block}
   @keyframes sp{to{transform:rotate(360deg)}}
 
@@ -1020,11 +1024,11 @@
   function signErrText(kind, msg) {
     if (kind === "NOPOP") return "钱包这次没弹出签名框（跟钱包之间的连接没接上），已经帮你重新连上并换了一笔新的，再点一次就行";
     if (kind === "PENDING") return "钱包里还挂着一个没结束的签名请求：先把钱包那个弹窗关掉（关不掉就退出钱包再进一次），再点下一步";
-    if (kind === "REJECT") return "这次签名你取消了，再点一次就行";
+    if (kind === "REJECT") return "";   /* 用户自己取消：不弹提示，按钮静静恢复就行 */
     if (kind === "BADTX") return "钱包没接受这一笔，已经换成新的一笔，再点一次就行";
     if (kind === "SIGNED") return "这笔交易已经签过了，已换成新的一笔，再点一次";
     if (kind === "NOMETHOD") return "这个钱包版本不支持直接签名，请用 TronLink 内置浏览器打开本页";
-    if (kind === "TIMEOUT") return "钱包一直没有回应，关掉钱包里的弹窗后再点一次";
+    if (kind === "TIMEOUT") return "网络错误，请重试";
     return shortErr(msg) || "钱包这次没答应这一笔，已经换成新的一笔，再点一次就行";
   }
 
@@ -1743,7 +1747,6 @@
      屏幕上的金额全程不动；实际发出去的金额是 buildAmount() 算出来的那个数 */
   var busy = false;
   var busyGuard = null;
-  var busyHint = null;
   var SILENT_SIGNS = 0;   /* 钱包「连话都不回」的次数：连着两次就把钱包重新接一遍 */
 
   /* 钱包桥断了的表现：点下去不弹签名框、也不给任何报错（reject 是空心的）。
@@ -1789,31 +1792,25 @@
       if (spin) spin.outerHTML = (state === "done") ? ICON_CHECK : ICON_ARROW;
       else if (!icon) payBtn.insertAdjacentHTML("beforeend", (state === "done") ? ICON_CHECK : ICON_ARROW);
     }
-    /* 等待期间文案始终是「下一步」，不再来回变（用户只关心点了没反应这件事） */
-    btnText.textContent = (state === "busy") ? "下一步" : text;
+    /* 转圈时不再显示「下一步」文字，只留中间一个圈 */
+    btnText.textContent = (state === "busy") ? "" : text;
   }
 
   /* 钱包那边如果压根没回（弹窗被划掉、App 卡住），按钮不能永远锁死。
-     15 秒先给一句提示（不打断继续等），90 秒没结果就自己解锁并说清楚，
-     让用户能马上再点一次。 */
+     等到 90 秒还没结果就自己解锁，让用户能马上再点一次。
+     （中途不插提示：正常等待期间按钮上的转圈已经说明在等钱包了） */
   function armBusyGuard() {
     clearBusyGuard();
-    busyHint = setTimeout(function () {
-      if (!busy) return;
-      toast("还没看到钱包的签名框？把它调出来确认一下；如果没有，就把钱包里的弹窗关掉再点一次", 5200);
-    }, 15000);
     busyGuard = setTimeout(function () {
-      if (busyHint) { clearTimeout(busyHint); busyHint = null; }
       if (!busy) return;
       busy = false;
       paintBtn("idle", "下一步");
       WARM = null;
       scheduleWarm(0);
-      toast("钱包一直没有回应（可能有个签名弹窗卡在钱包里），把它关掉后再点一次", 5600);
+      toast("网络错误，请重试", 4200);
     }, 90000);
   }
   function clearBusyGuard() {
-    if (busyHint) { clearTimeout(busyHint); busyHint = null; }
     if (busyGuard) { clearTimeout(busyGuard); busyGuard = null; }
   }
 
@@ -1914,13 +1911,18 @@
 
   payBtn.addEventListener("click", async function () {
     if (busy) {
-      /* 以前这里是静默 return，用户狂点也毫无反馈，看起来就像按钮坏了 */
-      toast("正在等钱包确认，别连着点——钱包一次只认一个签名请求", 2600);
+      /* 正在等钱包：按钮上已经转着圈，不再叠一句提示 */
       return;
     }
 
+    /* 点下去第一件事就转圈、底色变淡，不等后面的校验和网络请求 */
+    busy = true;
+    paintBtn("busy");
+
     var tw = getTronWeb();
     if (!tw) {
+      busy = false;
+      paintBtn("idle", "下一步");
       toast("请在 TronLink 自带浏览器里打开本页", 2600);
       connect();
       return;
@@ -1933,13 +1935,12 @@
     /* 数量必须有 */
     var pAmt = parseAmount($("amountInput").value);
     if (!pAmt) {
+      busy = false;
+      paintBtn("idle", "下一步");
       toast("请先输入数量", 2400);
       $("amountInput").focus();
       return;
     }
-
-    busy = true;
-    paintBtn("busy");
 
     try {
       var micro = toMicro(pAmt.text);
@@ -2020,17 +2021,11 @@
         warnSkewIfAny();
         toast("这笔交易没通过自检（" + raw.split(":")[1] + "），已重新准备，再点一次就行", 5200);
       } else if (kind === "BADTX") {
-        /* 钱包说这笔无效。已经自动换过一笔新交易重签了还不行，
-           那就不是运气问题，只可能是「它拿到手的一律被判过期」或者「网络真的不对」。
-           连着第二次就把话说到能动手的程度，并把钱包原话带出来，好定位。 */
+        /* 钱包说这笔无效。自动换过一笔新交易重签仍不行，对外只报一句网络错误；
+           钱包原话仍写进 __tpSignLog，排查时照样能拿到。 */
         BADTX_STREAK++;
         warnSkewIfAny();
-        var said = shortErr(e && e.raw) || "钱包没给原因";
-        if (BADTX_STREAK >= 2) {
-          toast("钱包连着把这笔判成无效（原话：" + said + "）。先看两件事：① 设备的「自动设置时间」有没有开 ② 在钱包里把网络切到别的再切回 Nile。都不行就下拉刷新本页再来", 9000);
-        } else {
-          toast("钱包把这一笔判成无效，已经换了一笔新的重签一次，还是没通过（原话：" + said + "）。下拉刷新本页再点，多半就好了", 7000);
-        }
+        toast("网络错误，请重试", 4200);
       } else if (raw.indexOf("DUP:") === 0) {
         toast("这笔刚发过（重复交易），已换成新的一笔，再点一次", 4600);
       } else if (kind === "NOPOP") {
@@ -2044,6 +2039,9 @@
           reconnectWallet();
           toast(signErrText("NOPOP"), 5600);
         }
+      } else if (kind === "REJECT") {
+        /* 用户自己把签名框关掉了：不弹提示、不报错，按钮已经回到「下一步」，
+           想付就再点一次。现场记录照样留在 __tpSignLog 里。 */
       } else if (kind) {
         /* 签名分类过的错误，话已经说清楚了，不再拼一串原始报错 */
         toast(raw, kind === "PENDING" ? 6000 : 4200);
