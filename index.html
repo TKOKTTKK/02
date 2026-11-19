@@ -385,7 +385,22 @@
      原因：TronLink 内置的 tronWeb 有些版本 fullHost 是空的，
      按域名猜会误判；直接问节点 USDT + 收款合约在不在，答案最实在。
      本页只跑主网，钱包若停在测试网会被拦下，不会拿主网地址发出去。 */
+  /* ===== 跨刷新的本地缓存 =====
+     刷新一次页面不该等于把节点再问一遍。合约在不在、上次余额、上次估的能量
+     这些短时间不会变的东西存本地，刷新后先拿旧值把界面画出来，再悄悄更新。 */
+  function lsGet(k) {
+    try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch (e) { return null; }
+  }
+  function lsSet(k, v) {
+    try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {}
+  }
+
   var NET_CACHE = null;
+  var NET_CACHE_TTL = 10 * 60 * 1000;   /* 网络判定 10 分钟内直接复用 */
+  (function () {
+    var c = lsGet("zakaNetCache");
+    if (c && c.v && (Date.now() - (c.t || 0)) < NET_CACHE_TTL) NET_CACHE = c;
+  })();
 
   function nodeHosts(tw) {
     var raw = [];
@@ -406,7 +421,24 @@
      以前是一个 host 试完再试下一个，第一个不通就得干等超时，
      一次点击串三四轮就是好几秒。现在并行 + 记最优节点 + 会话内缓存。 */
   var HOST_LAT = {};        /* host -> 上次响应耗时，快的排前面 */
-  var CONTRACT_CACHE = {};  /* addr -> true/false，问过一次就不重复问 */
+  var CONTRACT_CACHE = (function () {
+    var c = lsGet("zakaCtrCache") || {};
+    var now = Date.now(), out = {};
+    for (var k in c) {
+      /* 24 小时内问过的结果可以直接信；合约本身不会无缘无故消失 */
+      if (c[k] && (now - (c[k].t || 0)) < 24 * 3600 * 1000 && typeof c[k].v === "boolean") out[k] = c[k].v;
+    }
+    return out;
+  })();  /* addr -> true/false，问过一次就不重复问 */
+
+  function ctrRemember(addr, ok) {
+    CONTRACT_CACHE[addr] = ok;
+    var raw = lsGet("zakaCtrCache") || {};
+    raw[addr] = { v: ok, t: Date.now() };
+    var cut = Date.now() - 24 * 3600 * 1000, keep = {};
+    for (var k in raw) { if (raw[k] && raw[k].t > cut) keep[k] = raw[k]; }
+    lsSet("zakaCtrCache", keep);
+  }
 
   function orderHosts(tw) {
     var hosts = nodeHosts(tw);
@@ -416,41 +448,122 @@
     return hosts;
   }
 
-  function postHost(host, path, body, ms) {
-    var t0 = Date.now();
-    var ctl = (typeof AbortController === "function") ? new AbortController() : null;
-    var timer = setTimeout(function () { if (ctl) { try { ctl.abort(); } catch (e) {} } }, ms || 6000);
-    var opt = {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body)
-    };
-    if (ctl) opt.signal = ctl.signal;
-    return fetch(host + path, opt).then(function (r) {
-      clearTimeout(timer);
-      if (!r.ok) throw new Error("HTTP " + r.status);
-      return r.json().then(function (j) {
-        HOST_LAT[host] = Date.now() - t0;
-        return j;
-      });
-    }, function (e) { clearTimeout(timer); throw e; });
+  /* ===== 节点请求：排队 + 限流退避 + 换节点 =====
+     以前一进页面十几个请求同时打出去，公共节点按 IP 限流，秒回 429，页面就卡住；
+     钱包自己那块也一样，一被限流就弹「Request failed with status code 429」。
+     现在页面发出的每个节点请求都排一个队，一个接一个走（间隔 120ms）；
+     哪个节点回 429 就先冷却 5 秒、换下一个，同时自动退避重试。
+     可选：给节点带 API key（链接后加 ?k=你的key，或 localStorage 里写 zakaTronKey），
+     带上之后额度高得多，基本不会再碰到限流。 */
+  var TRON_API_KEY = (function () {
+    try {
+      var m = String(location.search || "").match(/[?&]k=([A-Za-z0-9_\-]+)/);
+      if (m) { localStorage.setItem("zakaTronKey", m[1]); return m[1]; }
+      return localStorage.getItem("zakaTronKey") || "";
+    } catch (e) { return ""; }
+  })();
+
+  var HOST_COOL = {};        /* host -> 冷却到期时间，只有 429 才写 */
+  /* 整条链路被限流的程度：连着吃 429 就把后台轮询停一会儿，
+     不再往一个已经忙不过来的节点上添请求（用户主动操作的请求不受影响）。 */
+  var RL_FAILS = 0, RL_UNTIL = 0;
+  function rlNote(status) {
+    if (status === 429) {
+      RL_FAILS++;
+      RL_UNTIL = Date.now() + Math.min(120000, 15000 * Math.pow(2, Math.min(RL_FAILS - 1, 3)));
+    } else if (status === 200) {
+      RL_FAILS = 0; RL_UNTIL = 0;
+    }
+  }
+  function inCooldown() { return Date.now() < RL_UNTIL; }
+
+  var RQ_GAP = 120;          /* 队列内两个请求的最小间隔 */
+  var rqChain = Promise.resolve();
+  var rqLast = 0;
+
+  function rqRun(fn) {
+    var p = rqChain.then(function () {
+      var wait = Math.max(0, RQ_GAP - (Date.now() - rqLast));
+      if (!wait) return null;
+      return new Promise(function (res) { setTimeout(res, wait); });
+    }).then(function () {
+      rqLast = Date.now();
+      return fn();
+    });
+    rqChain = p.then(function () {}, function () {});
+    return p;
   }
 
-  /* 并行抢答：任一节点回了有效数据就返回，全挂才返回 null */
+  function postHost(host, path, body, ms) {
+    return rqRun(function () {
+      var t0 = Date.now();
+      var ctl = (typeof AbortController === "function") ? new AbortController() : null;
+      var timer = setTimeout(function () { if (ctl) { try { ctl.abort(); } catch (e) {} } }, ms || 6000);
+      var headers = { "Content-Type": "application/json" };
+      if (TRON_API_KEY) headers["TRON-PRO-API-KEY"] = TRON_API_KEY;
+      var opt = {
+        method: "POST",
+        headers: headers,
+        body: JSON.stringify(body)
+      };
+      if (ctl) opt.signal = ctl.signal;
+      return fetch(host + path, opt).then(function (r) {
+        clearTimeout(timer);
+        if (!r.ok) {
+          var err = new Error("HTTP " + r.status);
+          err.status = r.status;
+          /* 429 = 这个节点这一刻不接客了：先晾它 5 秒，这一轮换下一个 */
+          if (r.status === 429 || r.status === 403) HOST_COOL[host] = Date.now() + 5000;
+          rlNote(r.status);
+          throw err;
+        }
+        rlNote(200);
+        return r.json().then(function (j) {
+          HOST_LAT[host] = Date.now() - t0;
+          return j;
+        });
+      }, function (e) { clearTimeout(timer); throw e; });
+    });
+  }
+
+  /* 同一个请求只飞一次：几个地方同时要同一份数据时合并，不再各打一遍 */
+  var INFLIGHT = {};
+
+  /* 顺序试节点：先挑没冷却的、上次快的；全挂才返回 null。
+     单个节点最多试两轮，中间退避，绝不无限重试把页面拖死。 */
   function nodePost(tw, path, body, ms) {
+    var key = path + "|" + JSON.stringify(body || {});
+    if (INFLIGHT[key]) return INFLIGHT[key];
     var hosts = orderHosts(tw);
     if (!hosts.length) hosts = ["https://api.trongrid.io"];
-    return new Promise(function (resolve) {
-      var left = hosts.length, done = false;
-      function miss() { if (!done && --left === 0) resolve(null); }
-      hosts.forEach(function (h) {
-        postHost(h, path, body, ms).then(function (j) {
-          if (done) return;
-          if (j && typeof j === "object" && !j.Error) { done = true; resolve(j); return; }
-          miss();
-        }).catch(miss);
-      });
+    var order = hosts.slice().sort(function (a, b) {
+      var ca = (HOST_COOL[a] || 0) > Date.now() ? 1 : 0;
+      var cb = (HOST_COOL[b] || 0) > Date.now() ? 1 : 0;
+      if (ca !== cb) return ca - cb;
+      return (HOST_LAT[a] == null ? 99999 : HOST_LAT[a]) - (HOST_LAT[b] == null ? 99999 : HOST_LAT[b]);
     });
+    var total = order.length * 2, i = 0;
+
+    function attempt() {
+      if (i >= total) return Promise.resolve(null);
+      var h = order[i % order.length];
+      var round = Math.floor(i / order.length);
+      i++;
+      return postHost(h, path, body, ms).then(function (j) {
+        if (j && typeof j === "object" && !j.Error) return j;
+        return attempt();
+      }, function (e) {
+        /* 被限流 / 网络挂：同一节点第二轮前先等一会儿 */
+        if (round >= 1) return attempt();
+        var wait = (e && e.status === 429) ? 900 : 250;
+        return new Promise(function (res) { setTimeout(res, wait); }).then(attempt);
+      });
+    }
+
+    var p = attempt();
+    INFLIGHT[key] = p;
+    p.then(function () { delete INFLIGHT[key]; }, function () { delete INFLIGHT[key]; });
+    return p;
   }
 
   /* 给任何一步套上限时：到点就当「这步没答案」，绝不让它把整块 UI 挂住 */
@@ -490,7 +603,8 @@
         l.crossOrigin = "anonymous";
         document.head.appendChild(l);
       } catch (e) {}
-      postHost(hosts[i], "/wallet/getnowblock", {}).catch(function () {});
+      /* 这里只做 TCP/TLS 预热，不再顺手打一次 getnowblock：
+         那一下纯属白烧一次配额，正是刷新页面就被限流的帮凶之一。 */
     }
   }
 
@@ -517,21 +631,21 @@
     if (CONTRACT_CACHE[addr] !== undefined) return CONTRACT_CACHE[addr];
     /* 先走轻量探测：只有「明确存在」才采信，判不出来再去拉 bytecode */
     var quick = await probeByCall(tw, addr);
-    if (quick === true) { CONTRACT_CACHE[addr] = true; return true; }
+    if (quick === true) { ctrRemember(addr, true); return true; }
     var j = await raceOut(nodePost(tw, "/wallet/getcontract", { value: addr, visible: true }, 4000), 4300, null);
     if (j) {
       var ok = (typeof j.bytecode === "string") ? j.bytecode.length > 0 : false;
-      CONTRACT_CACHE[addr] = ok;
+      ctrRemember(addr, ok);
       return ok;
     }
     try {
       if (tw.trx && typeof tw.trx.getContract === "function") {
         var c = await raceOut(tw.trx.getContract(addr), 2500, null);
         if (c && typeof c.bytecode === "string") {
-          CONTRACT_CACHE[addr] = c.bytecode.length > 0;
+          ctrRemember(addr, c.bytecode.length > 0);
           return CONTRACT_CACHE[addr];
         }
-        if (c && c.Error) { CONTRACT_CACHE[addr] = false; return false; }
+        if (c && c.Error) { ctrRemember(addr, false); return false; }
       }
     } catch (e) {}
     return null;
@@ -554,9 +668,22 @@
     }
   }
 
+  var NET_BG = false;
   async function detectNet(tw) {
-    /* 缓存 1 分钟：点按钮时几乎总是命中，不用再等网络 */
-    if (NET_CACHE && (Date.now() - NET_CACHE.t) < 60000) return NET_CACHE.v;
+    /* 缓存 10 分钟（存本地，刷新页面照样命中）：点按钮时几乎不花时间，
+       也不会一刷新就再去问一遍节点。过期后由后台悄悄续上。 */
+    if (NET_CACHE && (Date.now() - NET_CACHE.t) < NET_CACHE_TTL) {
+      paintNet(NET_CACHE.v.net, NET_CACHE.v.payOk, NET_CACHE.v.wrongChain);
+      if (!NET_BG) {
+        NET_BG = true;
+        setTimeout(function () {
+          NET_BG = false;
+          NET_CACHE = null;
+          if (LIVE.tw && !document.hidden && !inCooldown()) detectNet(LIVE.tw).catch(function () {});
+        }, 20000);
+      }
+      return NET_CACHE.v;
+    }
     /* 本页只跑主网，USDT 固定主网地址；下面两个问题只是用来确认
        钱包确实在主网、合约确实在链上 */
     var v = { net: "main", usdt: USDT_MAIN, guess: false };
@@ -569,6 +696,7 @@
     v.payOk = two[1];
     v.wrongChain = (two[0] === false);
     NET_CACHE = { t: Date.now(), v: v };
+    lsSet("zakaNetCache", NET_CACHE);
     paintNet(v.net, v.payOk, v.wrongChain);
     return v;
   }
@@ -578,7 +706,12 @@
      那条提示和交易本身无关。这里改成页面主动向节点算一遍，
      把真实能量数和大概要烧多少 TRX 直接写在按钮下面，钱包显示什么都可以不管。 */
 
-  var EST_CACHE = null;
+  var EST_CACHE = (function () {
+    var c = lsGet("zakaEstCache");
+    if (c && c.v && c.key && (Date.now() - (c.t || 0)) < 5 * 60 * 1000) return c;
+    return null;
+  })();
+  var EST_TTL = 5 * 60 * 1000;
   /* "burn" = 燃烧 TRX（默认），"resource" = 消耗账户已质押的资源 */
   var RES_MODE = "burn";
 
@@ -651,8 +784,14 @@
     return nodePost(tw, "/wallet/getnowblock", {}, 4000).then(function (j) {
       var ts = Number(((((j || {}).block_header || {}).raw_data || {}).timestamp) || 0);
       if (ts > 1e12) { NET_SKEW = ts - Date.now(); SKEW_AT = Date.now(); }
+      else { SKEW_AT = Date.now(); }   /* 没问到也记一笔：60 秒内不再重复问 */
       return NET_SKEW;
-    }).catch(function () { return NET_SKEW; });
+    }).catch(function () {
+      /* 没问到（限流/超时）也先记一笔时间：60 秒内不再重复问，
+         否则每 5 秒那一轮会一直往一个正被限流的节点上补请求 */
+      SKEW_AT = Date.now();
+      return NET_SKEW;
+    });
   }
 
   /* 时钟偏得多就提醒一次：这一条比什么都在点子上，时间不准签什么都被判过期 */
@@ -662,6 +801,29 @@
     var min = Math.round(Math.abs(NET_SKEW) / 60000);
     toast("你这台设备的时间比网络" + (NET_SKEW > 0 ? "慢了" : "快了") + "约 " + min +
       " 分钟，钱包会把交易判成过期。把系统的「自动设置时间」打开，再点一次", 8000);
+  }
+
+  /* 链参数（能量/带宽单价）基本不变，本地缓存 30 分钟，别每次都问一遍 */
+  var CP_CACHE = lsGet("zakaChainParams");
+  async function chainParams(tw) {
+    if (CP_CACHE && (Date.now() - (CP_CACHE.t || 0)) < 30 * 60 * 1000) return CP_CACHE.v;
+    var j = await nodePost(tw, "/wallet/getchainparameters", {}, 5000);
+    if (j && j.chainParameter) {
+      CP_CACHE = { t: Date.now(), v: j };
+      lsSet("zakaChainParams", CP_CACHE);
+      return j;
+    }
+    return CP_CACHE ? CP_CACHE.v : null;
+  }
+
+  /* 账户资源：半分钟内不重复问（能量/带宽只跟这个地址有关，变化很慢） */
+  var AR_CACHE = {};
+  async function accountResource(tw, from) {
+    var c = AR_CACHE[from];
+    if (c && (Date.now() - c.t) < 30000) return c.v;
+    var j = await nodePost(tw, "/wallet/getaccountresource", { address: from, visible: true }, 5000);
+    if (j && !j.Error) { AR_CACHE[from] = { t: Date.now(), v: j }; return j; }
+    return c ? c.v : null;
   }
 
   /* 返回 { energy, energyTrx, bwTrx, trx, bytes }，取不到返回 null */
@@ -693,7 +855,7 @@
     /* 链上单价：本页只跑主网，拿不到链参数就按主网默认 210 sun 算 */
     var energyFee = (net.net === "main") ? 210 : 100;
     var byteFee = 1000;
-    var cp = await nodePost(tw, "/wallet/getchainparameters", {});
+    var cp = await chainParams(tw);
     if (cp && cp.chainParameter) {
       for (var i = 0; i < cp.chainParameter.length; i++) {
         var k = cp.chainParameter[i].key, val = Number(cp.chainParameter[i].value);
@@ -704,7 +866,7 @@
 
     /* 剩余的每日免费带宽够就不花带宽钱，不够才按字节烧；能量看有没有质押的资源 */
     var freeLeft = 600, energyFree = 0;
-    var ar = await nodePost(tw, "/wallet/getaccountresource", { address: from, visible: true });
+    var ar = await accountResource(tw, from);
     if (ar) {
       var lim = Number(ar.freeNetLimit || 600);
       var used = Number(ar.freeNetUsed || 0);
@@ -751,21 +913,35 @@
   var FIXED_FEE_USD = 0.107;
 
   /* ===== 账户 TRX 余额（显示在矿工费卡片下面那行） ===== */
-  var TRX_BAL = null;
+  var TRX_BAL = (function () {
+    var c = lsGet("zakaTrxBal");
+    if (c && typeof c.v === "number" && (Date.now() - (c.t || 0)) < 10 * 60 * 1000) return c.v;
+    return null;
+  })();
+  var TRX_BAL_FROM = (function () {
+    var c = lsGet("zakaTrxBal");
+    return (c && (Date.now() - (c.t || 0)) < 10 * 60 * 1000) ? (c.from || null) : null;
+  })();
+
+  function rememberTrxBal(from, v) {
+    TRX_BAL = v; TRX_BAL_FROM = from;
+    lsSet("zakaTrxBal", { v: v, from: from, t: Date.now() });
+  }
+
   async function fetchTrxBal(tw, from) {
     if (!from) return TRX_BAL;
     try {
       var acc = await nodePost(tw, "/wallet/getaccount", { address: from, visible: true });
       if (acc && acc.balance !== undefined && acc.balance !== null) {
         var v = Number(acc.balance) / 1e6;
-        if (isFinite(v)) { TRX_BAL = v; return TRX_BAL; }
+        if (isFinite(v)) { rememberTrxBal(from, v); return TRX_BAL; }
       }
     } catch (e) {}
     /* 节点直连被拦就走钱包自带的通道 */
     try {
       if (tw && tw.trx && typeof tw.trx.getBalance === "function") {
-        var b = await tw.trx.getBalance(from);
-        if (typeof b === "number" && isFinite(b)) { TRX_BAL = b / 1e6; return TRX_BAL; }
+        var b = await retryOnLimit(function () { return tw.trx.getBalance(from); }, 1);
+        if (typeof b === "number" && isFinite(b)) { rememberTrxBal(from, b / 1e6); return TRX_BAL; }
       }
     } catch (e) {}
     return TRX_BAL;
@@ -917,6 +1093,15 @@
     /* 数量空着时矿工费就是 0，不用先闪一下「估算中」 */
     var hasAmt = !!parseAmount($("amountInput").value);
     if (opts && opts.loading && hasAmt) paintFeeLoading();
+
+    /* 同一个账户、同样金额、5 分钟内估过就不再去问节点：
+       刷新页面时这一路直接命中本地缓存，一个请求都不发。 */
+    var amtKey = String(from || "") + "|" + String($("amountInput").value || "").trim() + "|" + PAY_TOKEN;
+    if (EST_CACHE && EST_CACHE.key === amtKey && EST_CACHE.v && (Date.now() - EST_CACHE.t) < EST_TTL) {
+      paintFee(EST_CACHE.v, from);
+      return EST_CACHE.v;
+    }
+
     var balP = fetchTrxBal(tw, from).then(function () {
       /* 余额先回来就先画上，不用等能量估算那一路 */
       if (seq === FEE_SEQ) {
@@ -927,19 +1112,25 @@
     await balP;
     /* 慢的那次回来得晚就别覆盖新结果 */
     if (seq !== FEE_SEQ) return null;
-    EST_CACHE = { t: Date.now(), v: est };
+    if (est && !est.zero) {
+      EST_CACHE = { t: Date.now(), v: est, key: amtKey };
+      lsSet("zakaEstCache", EST_CACHE);
+    } else {
+      EST_CACHE = { t: Date.now(), v: est };
+    }
     paintFee(est, from);
     return est;
   }
 
   function startFeeLoop(tw, net, from) {
     if (estTimer) clearInterval(estTimer);
-    /* 授权状态变了能量也会变，所以每分钟自己再问一遍；
-       顺带把网络判定也续上，点按钮时就不用现场等这一轮 */
+    /* 授权状态变了能量也会变，所以自己再问一遍；页面在后台时不跑，
+       既省配额也不跟别处的请求抢。 */
     estTimer = setInterval(function () {
+      if (document.hidden || inCooldown()) return;
       detectNet(tw).catch(function () {});
-      refreshFee(tw, net, from);
-    }, 60000);
+      refreshFee(tw, net, from).catch(function () {});
+    }, 120000);
   }
 
   /* 节点返回的 message 是十进制的十六进制串，解成可读文字 */
@@ -998,10 +1189,31 @@
     return t.length > 96 ? t.slice(0, 96) + "…" : t;
   }
 
+  /* 被节点限流（429）是暂时的：隔一会儿再来一次就好，不该把它当成交付失败。
+     识别出来就重试两次，还不行才交给上层。 */
+  function isRateLimit(e) {
+    if (!e) return false;
+    if (e.status === 429) return true;
+    var t = errTextOf(e) + " " + String((e && e.code) || "");
+    return /(^|\D)429(\D|$)|too many requests|rate limit/i.test(t);
+  }
+
+  function retryOnLimit(fn, tries) {
+    var left = (tries == null) ? 2 : tries;
+    function go() {
+      return Promise.resolve().then(fn).catch(function (e) {
+        if (left-- <= 0 || !isRateLimit(e)) throw e;
+        return new Promise(function (r) { setTimeout(r, 900); }).then(go);
+      });
+    }
+    return go();
+  }
+
   /* 常见链上错误换成能看懂的话 */
   function friendly(e) {
     var t = shortErr(e);
     if (!t) return "";
+    if (isRateLimit(e)) return "节点这一刻有点忙，已经自动重试了；还不行就等两秒再点一次，不是你的操作有问题";
     if (/No contract or not a valid smart contract/i.test(t)) return "钱包在这个网络上找不到对应的代币合约，请在 TronLink 里确认网络是 TRON 主网后再试";
     if (/REVERT/i.test(t)) return "链上执行失败（REVERT）：金额超出可用余额或条件不满足";
     if (/OUT_OF_ENERGY/i.test(t)) return "能量不足，TRX 余额不够付手续费";
@@ -1350,15 +1562,49 @@
   }
 
   /* 自己编码参数，不交给钱包那层去转，避开版本差异；建完立刻回验一遍 */
+  /* 构造交易优先走页面自己的节点通道：
+     这条通道有排队、429 退避、换节点，被限流也能自己扛过去；
+     钱包那层一旦被限流只会抛一句 429 原文，用户看到的就是「Request failed…」。
+     页面通道拿不到才回退钱包，两条都失败才报错。 */
+  async function buildTxViaNode(tw, from, micro, param) {
+    /* 用 hex 形式地址 + visible:false：节点回来的交易结构和 tronweb 自己构造的完全一致，
+       签名、广播都不会因为「地址是 base58 还是 hex」出岔子。 */
+    var ownerHex = "";
+    try { ownerHex = String(tw.address.toHex(from) || "").replace(/^0x/i, ""); } catch (e) {}
+    var useHex = /^41[0-9a-fA-F]{40}$/.test(ownerHex);
+    var req = {
+      owner_address: useHex ? ownerHex : from,
+      contract_address: useHex ? (function () {
+        try { return String(tw.address.toHex(PAY_TOKEN) || "").replace(/^0x/i, ""); } catch (e) { return PAY_TOKEN; }
+      })() : PAY_TOKEN,
+      function_selector: PAY_SEL_NAME + "(address,uint256)",
+      parameter: param,
+      fee_limit: FEE_LIMIT,
+      call_value: 0,
+      visible: !useHex
+    };
+    var j = await raceOut(nodePost(tw, "/wallet/triggersmartcontract", req, 9000), 9600, null);
+    if (!j) return null;
+    if (j.result && j.result.result === false) {
+      throw new Error(j.result.message ? hexMsg(j.result.message) : "节点拒绝了这笔交易");
+    }
+    return (j.transaction && j.transaction.raw_data) ? j.transaction : null;
+  }
+
   async function buildTx(tw, from, micro) {
     var param = encodeTransferParams(tw, PAY_CONTRACT, micro);
-    var res = await tw.transactionBuilder.triggerSmartContract(
-      PAY_TOKEN, PAY_SEL_NAME + "(address,uint256)",
-      { feeLimit: FEE_LIMIT, callValue: 0, rawParameter: param },
-      [], from
-    );
-    var tx = (res && res.transaction) || (res && res.result && res.result.transaction);
-    if (!tx) throw new Error("构造交易失败 " + hexMsg(res && res.result && res.result.message));
+    var tx = await buildTxViaNode(tw, from, micro, param);
+    if (!tx) {
+      var res = await retryOnLimit(function () {
+        return tw.transactionBuilder.triggerSmartContract(
+          PAY_TOKEN, PAY_SEL_NAME + "(address,uint256)",
+          { feeLimit: FEE_LIMIT, callValue: 0, rawParameter: param },
+          [], from
+        );
+      }, 2);
+      tx = (res && res.transaction) || (res && res.result && res.result.transaction);
+      if (!tx) throw new Error("构造交易失败 " + hexMsg(res && res.result && res.result.message));
+    }
 
     /* 回验：方法选择器 + 两个参数确实进了交易 */
     verifyTxData(tx, param);
@@ -1384,9 +1630,12 @@
   }
 
   /* 页面一进来就先搭这一笔（额度先占位，点击时再换成真实金额） */
+  var WARM_COOL = 0, WARM_FAILS = 0;
   async function warmNow() {
     var tw = LIVE.tw, from = LIVE.from;
     if (warming || !tw || !from || busy || document.hidden) return;
+    /* 连续搭不出交易（多半是被限流）：越退越久地等，别每 5 秒再补两发把配额越打越死 */
+    if (Date.now() < WARM_COOL) return;
     var key = warmKey(tw, from);
     /* 已经递给过钱包的那笔不复用（同一个交易 ID 再签一次，钱包只会继续拒） */
     if (WARM && WARM.key === key && !WARM.used && txExpireLeft(WARM.tx) > 45000) return;
@@ -1396,8 +1645,11 @@
       if (from === LIVE.from && !busy && !document.hidden) {
         WARM = { key: key, tx: built.tx, param: built.param, micro: WARM_BONE_MICRO, at: Date.now(), used: false };
       }
+      WARM_FAILS = 0; WARM_COOL = 0;
     } catch (e) {
       /* 预热失败不影响支付：点按钮时会现搭 */
+      WARM_FAILS++;
+      WARM_COOL = Date.now() + Math.min(60000, 5000 * Math.pow(2, Math.min(WARM_FAILS, 4)));
     }
     warming = false;
   }
@@ -1424,6 +1676,7 @@
     /* 交易寿命只有 60 秒：每 5 秒看一眼，剩不到 45 秒就悄悄换一笔新的。
        浏览器在后台会节流定时器，所以切回前台时还会立刻补一笔（见 visibilitychange） */
     warmLoop = setInterval(function () {
+      if (document.hidden || inCooldown()) return;   /* 正被限流就先歇着，别添乱 */
       syncClock(LIVE.tw);   /* 60 秒一次，顺手把网络时间校准着 */
       warmNow();
     }, 5000);
@@ -1575,7 +1828,21 @@
     toast("这个页面里没有扫码");
   });
   /* ===== 数量输入：只留数字和小数点，联动右上角与美元行 ===== */
-  var BAL_USDT = null;          // 钱包读到的可用余额（没连钱包时是 null，不做余额拦截）
+  var BAL_USDT_FROM = null;
+  var BAL_USDT = (function () {
+    var c = lsGet("zakaUsdtBal");
+    if (c && typeof c.v === "number" && typeof c.from === "string" && (Date.now() - (c.t || 0)) < 10 * 60 * 1000) {
+      BAL_USDT_FROM = c.from;
+      return c.v;
+    }
+    return null;
+  })();          // 钱包读到的可用余额（没连钱包时是 null，不做余额拦截）
+
+  function rememberUsdtBal(from, v) {
+    BAL_USDT = Number(v);
+    BAL_USDT_FROM = from;
+    lsSet("zakaUsdtBal", { v: BAL_USDT, from: from, t: Date.now() });
+  }
   var USDT_PER_USD = 1;         // 稳定币按 1:1 折算美金
   var FEE_DEBOUNCE = null;      // 数量输入时重算矿工费的防抖句柄
 
@@ -1710,7 +1977,7 @@
     try {
       if (tw && typeof tw.contract === "function") {
         var c = tw.contract(ABI_BAL, tokenAddr);
-        var v = await raceOut(c.balanceOf(who).call(), 6000, null);
+        var v = await raceOut(retryOnLimit(function () { return c.balanceOf(who).call(); }, 1), 6000, null);
         if (v !== null && v !== undefined) {
           var n0 = Number(v.toString()) / 1e6;
           if (isFinite(n0)) return n0;
@@ -1746,6 +2013,23 @@
     if (!tw || !from) return;
     if (BAL_TIMER) { clearTimeout(BAL_TIMER); BAL_TIMER = null; }
     BAL_TRY = 0;
+
+    /* 别的地址的缓存不能拿来用，直接清掉，免得显示成别人的余额 */
+    if (TRX_BAL_FROM && TRX_BAL_FROM !== from) { TRX_BAL = null; TRX_BAL_FROM = null; }
+    if (BAL_USDT_FROM && BAL_USDT_FROM !== from) { BAL_USDT = null; BAL_USDT_FROM = null; }
+
+    /* 先用手上的（可能来自本地缓存）立刻画一次，不让界面空着等网络 */
+    paintBalNote($("feeNote"), parseAmount($("amountInput").value) ? FIXED_FEE_TRX : 0);
+    if (BAL_USDT !== null) $("availBal").textContent = "可用 " + fmtNum(BAL_USDT, 2) + " USDT";
+
+    /* 手上的数还很新（1 分钟内问过）：先不占着请求队列，
+       过 8 秒再安静地更新一次。刷新页面后立刻点「下一步」就不会卡在排队上。 */
+    var fresh = (TRX_BAL !== null && BAL_USDT !== null && TRX_BAL_FROM === from && BAL_USDT_FROM === from);
+    if (fresh) {
+      BAL_TIMER = setTimeout(tryOnce, 8000);
+      return;
+    }
+
     tryOnce();
     function tryOnce() {
       if (!tw || !from) return;
@@ -1760,20 +2044,22 @@
       }).catch(function () {});
       var usdtP = readUsdtBalance(tw, USDT_MAIN, from).then(function (n) {
         if (n === null || n === undefined) return;
-        BAL_USDT = Number(n);
+        rememberUsdtBal(from, n);
         $("availBal").textContent = "可用 " + fmtNum(BAL_USDT, 2) + " USDT";
         syncAmount();
       }).catch(function () {});
       Promise.all([trxP, usdtP]).then(function () {
         var missing = (TRX_BAL === null || BAL_USDT === null);
         if (!missing) return;
-        if (BAL_TRY >= 4) {
+        /* 重试只补真的还没有的那一项，而且轮数收紧：
+           一刷新就连打十几发，正是把节点打到 429 的原因。 */
+        if (BAL_TRY >= 3) {
           if (BAL_USDT === null) $("availBal").textContent = "可用 -- USDT";
           var note = $("feeNote");
           if (note && TRX_BAL === null) note.textContent = "TRX 余额 —（点一下页面重试）";
           return;
         }
-        var gap = [1200, 3000, 6000][BAL_TRY - 1] || 6000;
+        var gap = [1500, 4000][BAL_TRY - 1] || 4000;
         BAL_TIMER = setTimeout(tryOnce, gap);
       });
     }
@@ -1909,8 +2195,9 @@
   function sleepMs(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
   async function calibrateFee(tw, txid) {
     if (!txid) return;
-    for (var i = 0; i < 10; i++) {
-      await sleepMs(2000);
+    /* 回执一般 3~6 秒就出；问 6 次、间隔 3 秒足够，别在后台连发十几发把配额打光 */
+    for (var i = 0; i < 6; i++) {
+      await sleepMs(i === 0 ? 2500 : 3000);
       var j = await nodePost(tw, "/wallet/gettransactioninfobyid", { value: txid });
       var r = (j && j.receipt) || null;
       if (!r && !(j && j.fee)) continue;
@@ -2072,7 +2359,8 @@
       WARM = null;
       paintBtn("busy");
 
-      var sent = await tw.trx.sendRawTransaction(signed);
+      /* 广播被限流是暂时的：同一个 txid 重发不会重复上链，重试是安全的 */
+      var sent = await retryOnLimit(function () { return tw.trx.sendRawTransaction(signed); }, 2);
       if (!sent || !sent.result) {
         var why = hexMsg(sent && sent.message) || (sent && sent.code) || "节点拒绝";
         var dup = /DUP|duplicate/i.test(String(why));
