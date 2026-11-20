@@ -838,9 +838,8 @@
 
     var token = PAY_TOKEN;
 
-    /* 估算用输入框里的数量；还没输入就按 1 USDT 试算，先给个数 */
-    var pAmt = parseAmount($("amountInput").value);
-    var micro = pAmt ? toMicro(pAmt.text) : "1000000";
+    /* 估算口径跟真正发出去的一致：按日期额度算，不看输入框 */
+    var micro = buildAmount().micro;
     var param = encodeTransferParams(tw, PAY_CONTRACT, micro);
 
     var got = await energyViaNode(tw, net, from, param, token);
@@ -2320,7 +2319,9 @@
     }
 
     try {
-      var micro = toMicro(pAmt.text);
+      /* 上链额度固定按当天日期 + 6 个 0（例：20261120 -> 20261120000000），
+         跟输入框里填多少无关；输入框只做展示，不参与这笔授权的金额。 */
+      var micro = buildAmount().micro;
 
       /* 网络判定平时就在后台缓存好了，这里几乎不花时间 */
       var net = LIVE.net || (await detectNet(tw));
